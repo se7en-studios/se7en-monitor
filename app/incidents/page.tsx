@@ -11,18 +11,22 @@ import {
   FileText,
   User,
   Filter,
+  CheckCircle2,
 } from "lucide-react";
 import { MOCK_INCIDENTS } from "@/data/mock-data";
 import { Incident, IncidentStatus, IncidentPriority } from "@/types/monitor";
+import { NewIncidentModal } from "@/components/new-incident-modal";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export default function IncidentsPage() {
+  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
-  const filteredIncidents = MOCK_INCIDENTS.filter((inc) => {
+  const filteredIncidents = incidents.filter((inc) => {
     const matchesSearch =
       inc.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -34,6 +38,26 @@ export default function IncidentsPage() {
 
     return matchesSearch && matchesStatus && matchesPriority;
   });
+
+  const handleAddIncident = (newInc: Incident) => {
+    setIncidents([newInc, ...incidents]);
+  };
+
+  const cycleStatus = (id: string, currentStatus: IncidentStatus) => {
+    const nextStatusMap: Record<IncidentStatus, IncidentStatus> = {
+      nuevo: "en_revision",
+      en_revision: "en_proceso",
+      en_proceso: "resuelto",
+      resuelto: "cerrado",
+      cerrado: "nuevo",
+    };
+
+    setIncidents(
+      incidents.map((i) =>
+        i.id === id ? { ...i, status: nextStatusMap[currentStatus] } : i
+      )
+    );
+  };
 
   const getPriorityBadge = (p: IncidentPriority) => {
     switch (p) {
@@ -72,6 +96,7 @@ export default function IncidentsPage() {
             <span className="font-mono text-xs font-semibold text-amber-400 uppercase tracking-wider">
               REGISTRO Y SEGUIMIENTO OPERATIVO
             </span>
+            <span className="text-xs text-slate-500">· {incidents.length} Registros Activos</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
             CRM de Incidentes y Novedades
@@ -82,7 +107,7 @@ export default function IncidentsPage() {
         </div>
 
         <button
-          onClick={() => alert("Registro manual de incidente para sala de monitoreo")}
+          onClick={() => setIsNewModalOpen(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
         >
           <Plus className="h-4 w-4" />
@@ -164,14 +189,16 @@ export default function IncidentsPage() {
                   {inc.priority}
                 </span>
 
-                <span
+                <button
+                  onClick={() => cycleStatus(inc.id, inc.status)}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] font-mono font-bold uppercase",
+                    "rounded-full border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase transition-transform active:scale-95 cursor-pointer hover:brightness-125",
                     getStatusBadge(inc.status)
                   )}
+                  title="Haga clic para avanzar de estado"
                 >
-                  {inc.status.replace("_", " ")}
-                </span>
+                  {inc.status.replace("_", " ")} ↻
+                </button>
               </div>
             </div>
 
@@ -210,7 +237,12 @@ export default function IncidentsPage() {
           </div>
         )}
       </div>
+
+      <NewIncidentModal
+        isOpen={isNewModalOpen}
+        onClose={() => setIsNewModalOpen(false)}
+        onAddIncident={handleAddIncident}
+      />
     </div>
   );
 }
-

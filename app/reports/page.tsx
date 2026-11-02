@@ -1,6 +1,15 @@
-import { FileBarChart, Download, Calendar, ShieldCheck, Activity } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { FileBarChart, Download, Calendar, ShieldCheck, Activity, Eye } from "lucide-react";
+import { ReportModal } from "@/components/report-modal";
 
 export default function ReportsPage() {
+  const [selectedReport, setSelectedReport] = useState<{
+    title: string;
+    period: string;
+  } | null>(null);
+
   const reports = [
     {
       title: "Informe Mensual de Disponibilidad y SLA Escolar",
@@ -40,7 +49,15 @@ export default function ReportsPage() {
           </p>
         </div>
 
-        <button className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors">
+        <button
+          onClick={() =>
+            setSelectedReport({
+              title: "Informe Personalizado de Auditoría Municipal",
+              period: "Noviembre 2026",
+            })
+          }
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+        >
           <Calendar className="h-4 w-4" />
           <span>Generar Reporte Personalizado</span>
         </button>
@@ -64,14 +81,43 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <button className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#070a12] px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-white/[0.05] shrink-0">
-              <Download className="h-4 w-4 text-blue-400" />
-              <span>Descargar ({rep.size})</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() =>
+                  setSelectedReport({
+                    title: rep.title,
+                    period: rep.period,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-600/15 px-3 py-2 text-xs font-semibold text-blue-300 hover:bg-blue-600/25 transition-colors"
+              >
+                <Eye className="h-4 w-4" />
+                <span>Ver e Imprimir</span>
+              </button>
+
+              <button
+                onClick={() =>
+                  setSelectedReport({
+                    title: rep.title,
+                    period: rep.period,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/[0.05]"
+              >
+                <Download className="h-4 w-4 text-blue-400" />
+                <span>PDF ({rep.size})</span>
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      <ReportModal
+        isOpen={Boolean(selectedReport)}
+        onClose={() => setSelectedReport(null)}
+        reportTitle={selectedReport?.title}
+        period={selectedReport?.period}
+      />
     </div>
   );
 }
-

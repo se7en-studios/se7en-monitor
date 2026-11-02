@@ -16,13 +16,16 @@ import {
 } from "lucide-react";
 import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
 import { StatusBadge } from "@/components/status-badge";
+import { AddSchoolModal } from "@/components/add-school-modal";
 import { School } from "@/types/monitor";
 
 export default function SchoolsPage() {
+  const [schools, setSchools] = useState<School[]>(MOCK_SCHOOLS);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<School | null>(MOCK_SCHOOLS[0]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  const filteredSchools = MOCK_SCHOOLS.filter(
+  const filteredSchools = schools.filter(
     (s) =>
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -33,6 +36,11 @@ export default function SchoolsPage() {
     ? MOCK_CAMERAS.filter((c) => c.school_id === selectedSchool.id)
     : [];
 
+  const handleAddSchool = (newSchool: School) => {
+    setSchools([newSchool, ...schools]);
+    setSelectedSchool(newSchool);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -42,6 +50,7 @@ export default function SchoolsPage() {
             <span className="font-mono text-xs font-semibold text-blue-400 uppercase tracking-wider">
               CRM EDUCATIVO MUNICIPAL
             </span>
+            <span className="text-xs text-slate-500">· {schools.length} Establecimientos</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
             Establecimientos Educativos
@@ -52,7 +61,7 @@ export default function SchoolsPage() {
         </div>
 
         <button
-          onClick={() => alert("Formulario de registro de nueva escuela en Catriel")}
+          onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
         >
           <Plus className="h-4 w-4" />
@@ -226,7 +235,12 @@ export default function SchoolsPage() {
           )}
         </div>
       </div>
+
+      <AddSchoolModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddSchool={handleAddSchool}
+      />
     </div>
   );
 }
-

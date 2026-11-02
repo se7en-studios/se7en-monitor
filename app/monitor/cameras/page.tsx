@@ -19,6 +19,7 @@ import {
 import { MOCK_CAMERAS, MOCK_SCHOOLS } from "@/data/mock-data";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
+import { AddCameraModal } from "@/components/add-camera-modal";
 import { Camera, CameraStatus } from "@/types/monitor";
 import { formatTimeAgo } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export default function CamerasManagerPage() {
   const [selectedSchool, setSelectedSchool] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [cameras, setCameras] = useState<Camera[]>(MOCK_CAMERAS);
 
   const filteredCameras = cameras.filter((cam) => {
@@ -50,6 +52,10 @@ export default function CamerasManagerPage() {
     }
   };
 
+  const handleAddCamera = (newCam: Camera) => {
+    setCameras([newCam, ...cameras]);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Title & Main Actions */}
@@ -59,6 +65,7 @@ export default function CamerasManagerPage() {
             <span className="font-mono text-xs font-semibold text-blue-400 uppercase tracking-wider">
               GESTIÓN DE DISPOSITIVOS
             </span>
+            <span className="text-xs text-slate-500">· {cameras.length} Cámaras Registradas</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
             Administrador de Cámaras
@@ -78,7 +85,7 @@ export default function CamerasManagerPage() {
           </button>
 
           <button
-            onClick={() => alert("Formulario de alta de cámara fija (IP / RTSP) para Catriel")}
+            onClick={() => setIsAddModalOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
           >
             <Plus className="h-4 w-4" />
@@ -224,7 +231,12 @@ export default function CamerasManagerPage() {
         isOpen={isConnectModalOpen}
         onClose={() => setIsConnectModalOpen(false)}
       />
+
+      <AddCameraModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddCamera={handleAddCamera}
+      />
     </div>
   );
 }
-

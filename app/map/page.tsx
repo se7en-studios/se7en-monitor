@@ -1,23 +1,40 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   MapPin,
   Cctv,
   School,
   Layers,
-  ZoomIn,
-  ZoomOut,
   Compass,
   Shield,
   Radio,
-  Eye,
+  ExternalLink,
+  Video,
 } from "lucide-react";
 import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
 import { StatusBadge } from "@/components/status-badge";
 import { School as SchoolType, Camera as CameraType } from "@/types/monitor";
 
+// Dynamic import for Leaflet map to prevent SSR window/navigator errors
+const InteractiveMap = dynamic(
+  () => import("@/components/interactive-map").then((mod) => mod.InteractiveMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-[#070b13] text-slate-500 font-mono text-xs">
+        <Compass className="h-6 w-6 animate-spin text-blue-500 mr-2" />
+        Cargando capas cartográficas de Catriel...
+      </div>
+    ),
+  }
+);
+
 export default function MonitoringMapPage() {
+  const [schools] = useState<SchoolType[]>(MOCK_SCHOOLS);
+  const [cameras] = useState<CameraType[]>(MOCK_CAMERAS);
   const [selectedEntity, setSelectedEntity] = useState<SchoolType | CameraType | null>(
     MOCK_SCHOOLS[0]
   );
@@ -38,7 +55,7 @@ export default function MonitoringMapPage() {
             Mapa de Cobertura y Corredores Escolares
           </h1>
           <p className="text-xs text-slate-400">
-            Perímetros de seguridad de 200 metros alrededor de las escuelas de Catriel y despliegue de cámaras
+            Perímetros preventivos de 200 metros alrededor de las escuelas de Catriel (Río Negro) y cámaras geolocalizadas
           </p>
         </div>
 
@@ -46,9 +63,9 @@ export default function MonitoringMapPage() {
         <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0c101a] p-1.5 text-xs">
           <button
             onClick={() => setShowRadius(!showRadius)}
-            className={`rounded px-2.5 py-1 font-medium transition-colors ${
+            className={`rounded px-3 py-1.5 font-medium transition-colors ${
               showRadius
-                ? "bg-blue-600 text-white"
+                ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-white"
             }`}
           >
@@ -56,9 +73,9 @@ export default function MonitoringMapPage() {
           </button>
           <button
             onClick={() => setShowCameras(!showCameras)}
-            className={`rounded px-2.5 py-1 font-medium transition-colors ${
+            className={`rounded px-3 py-1.5 font-medium transition-colors ${
               showCameras
-                ? "bg-blue-600 text-white"
+                ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-white"
             }`}
           >
@@ -67,210 +84,53 @@ export default function MonitoringMapPage() {
         </div>
       </div>
 
-      {/* Main Map Canvas Area */}
+      {/* Main Map Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Map Viewport Container */}
-        <div className="lg:col-span-3 relative h-[600px] w-full rounded-2xl border border-white/[0.08] bg-[#070b13] overflow-hidden shadow-2xl">
-          {/* Subtle Grid Background resembling digital tactical GIS map */}
-          <div
-            className="absolute inset-0 opacity-20"
-            style={{
-              backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)`,
-              backgroundSize: "32px 32px",
-            }}
+        <div className="lg:col-span-3 relative h-[620px] w-full rounded-2xl border border-white/[0.08] overflow-hidden shadow-2xl">
+          <InteractiveMap
+            schools={schools}
+            cameras={cameras}
+            selectedEntity={selectedEntity}
+            onSelectEntity={(entity) => setSelectedEntity(entity)}
+            showRadius={showRadius}
+            showCameras={showCameras}
           />
 
-          {/* Map Compass & Watermark */}
-          <div className="absolute top-4 left-4 z-10 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0c101a]/85 backdrop-blur-md px-3 py-1.5 text-xs text-slate-300">
-            <Compass className="h-4 w-4 text-blue-400 animate-spin-slow" />
-            <span className="font-mono text-[11px]">CATRIEL, RN · 37°52&apos;42&quot;S 67°47&apos;43&quot;W</span>
-          </div>
-
-          <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5">
-            <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0c101a]/85 text-slate-300 hover:bg-white/[0.08]">
-              <ZoomIn className="h-4 w-4" />
-            </button>
-            <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-[#0c101a]/85 text-slate-300 hover:bg-white/[0.08]">
-              <ZoomOut className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* SVG Canvas for 200m radii and school nodes */}
-          <svg className="absolute inset-0 h-full w-full pointer-events-none">
-            <defs>
-              {/* Radial gradient for 200m perimeter highlight */}
-              <radialGradient id="perimeterGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
-                <stop offset="70%" stopColor="#2563eb" stopOpacity="0.1" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-
-            {/* School nodes and 200m radius circles */}
-            {showRadius && (
-              <>
-                {/* Escuela 204 */}
-                <circle cx="280" cy="240" r="110" fill="url(#perimeterGlow)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
-                {/* CEM 21 */}
-                <circle cx="480" cy="340" r="110" fill="url(#perimeterGlow)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
-                {/* Jardín 43 */}
-                <circle cx="210" cy="160" r="95" fill="url(#perimeterGlow)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
-                {/* CET 7 */}
-                <circle cx="620" cy="420" r="120" fill="url(#perimeterGlow)" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 4" />
-                {/* Escuela 195 */}
-                <circle cx="360" cy="490" r="105" fill="url(#perimeterGlow)" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.7" />
-              </>
-            )}
-          </svg>
-
-          {/* Interactive School Pins */}
-          <div className="absolute inset-0 pointer-events-auto">
-            {/* ESCUELA 204 */}
-            <div
-              onClick={() => setSelectedEntity(MOCK_SCHOOLS[0])}
-              style={{ left: "280px", top: "240px" }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-xl shadow-blue-500/50 group-hover:scale-125 transition-transform border-2 border-white">
-                <School className="h-5 w-5" />
-              </div>
-              <div className="absolute top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0c101a] border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                Escuela N° 204
-              </div>
-            </div>
-
-            {/* CEM 21 */}
-            <div
-              onClick={() => setSelectedEntity(MOCK_SCHOOLS[1])}
-              style={{ left: "480px", top: "340px" }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-xl shadow-blue-500/50 group-hover:scale-125 transition-transform border-2 border-white">
-                <School className="h-5 w-5" />
-              </div>
-              <div className="absolute top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0c101a] border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                CEM N° 21
-              </div>
-            </div>
-
-            {/* JARDIN 43 */}
-            <div
-              onClick={() => setSelectedEntity(MOCK_SCHOOLS[2])}
-              style={{ left: "210px", top: "160px" }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-500/50 group-hover:scale-125 transition-transform border-2 border-white">
-                <School className="h-4 w-4" />
-              </div>
-              <div className="absolute top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0c101a] border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                Jardín N° 43
-              </div>
-            </div>
-
-            {/* CET 7 */}
-            <div
-              onClick={() => setSelectedEntity(MOCK_SCHOOLS[3])}
-              style={{ left: "620px", top: "420px" }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-500/50 group-hover:scale-125 transition-transform border-2 border-white">
-                <School className="h-5 w-5" />
-              </div>
-              <div className="absolute top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0c101a] border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                C.E.T. N° 7
-              </div>
-            </div>
-
-            {/* ESCUELA 195 */}
-            <div
-              onClick={() => setSelectedEntity(MOCK_SCHOOLS[4])}
-              style={{ left: "360px", top: "490px" }}
-              className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-600 text-white shadow-xl shadow-amber-500/50 group-hover:scale-125 transition-transform border-2 border-white">
-                <School className="h-5 w-5" />
-              </div>
-              <div className="absolute top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#0c101a] border border-white/[0.1] px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-                Escuela N° 195 (Atención)
-              </div>
-            </div>
-
-            {/* Camera pins around schools */}
-            {showCameras && (
-              <>
-                {/* Cam 1 */}
-                <div
-                  onClick={() => setSelectedEntity(MOCK_CAMERAS[0])}
-                  style={{ left: "260px", top: "220px" }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  title="CAM-204-ACC (Online)"
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-black font-bold shadow-md group-hover:scale-150 transition-transform">
-                    <Cctv className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Cam 2 */}
-                <div
-                  onClick={() => setSelectedEntity(MOCK_CAMERAS[1])}
-                  style={{ left: "330px", top: "270px" }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  title="CAM-204-CORR (Online)"
-                >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-black font-bold shadow-md group-hover:scale-150 transition-transform">
-                    <Cctv className="h-3.5 w-3.5" />
-                  </div>
-                </div>
-
-                {/* Mobile Camera Transmitter (Patrulla) */}
-                <div
-                  onClick={() => setSelectedEntity(MOCK_CAMERAS[7])}
-                  style={{ left: "430px", top: "290px" }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                  title="CAM-MOB-DEMO (Móvil WebRTC)"
-                >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400 text-black font-bold shadow-lg animate-pulse group-hover:scale-150 transition-transform">
-                    <Radio className="h-4 w-4" />
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Bottom Legend Overlay */}
-          <div className="absolute bottom-4 left-4 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-white/[0.08] bg-[#0c101a]/90 backdrop-blur-md px-3.5 py-2 text-xs">
+          {/* Bottom Tactical Legend */}
+          <div className="absolute bottom-4 left-4 z-[400] flex flex-wrap items-center gap-3.5 rounded-xl border border-white/[0.1] bg-[#0c101a]/95 backdrop-blur-md px-4 py-2.5 text-xs shadow-xl">
             <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="h-3 w-3 rounded-full bg-blue-500 border border-white/20" />
+              <span className="h-3 w-3 rounded-full bg-blue-600 border border-white" />
               Escuela
             </span>
             <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="h-3 w-3 rounded-full bg-emerald-500" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
               Cámara Online
             </span>
             <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="h-3 w-3 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse" />
               Móvil WebRTC
             </span>
             <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="h-3 w-3 rounded-full border border-sky-400 border-dashed" />
-              Radio 200m
+              <span className="h-2.5 w-2.5 rounded-full border border-sky-400 border-dashed" />
+              Radio Ley 200m
             </span>
           </div>
         </div>
 
         {/* Right Details Panel */}
-        <div className="lg:col-span-1 rounded-2xl border border-white/[0.08] bg-[#0c101a] p-5">
+        <div className="lg:col-span-1 rounded-2xl border border-white/[0.08] bg-[#0c101a] p-5 flex flex-col justify-between">
           {selectedEntity ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-                <span className="font-mono text-[10px] uppercase text-slate-400">
-                  {"code" in selectedEntity ? "ESTABLECIMIENTO" : "DISPOSITIVO"}
+                <span className="font-mono text-[10px] uppercase text-slate-400 tracking-wider">
+                  {"code" in selectedEntity ? "ESTABLECIMIENTO EDUCATIVO" : "DISPOSITIVO DE VIDEO"}
                 </span>
                 <StatusBadge status={selectedEntity.status} size="sm" />
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className="text-lg font-bold text-white">
                   {"name" in selectedEntity && selectedEntity.name}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
@@ -281,47 +141,83 @@ export default function MonitoringMapPage() {
               </div>
 
               {"code" in selectedEntity ? (
-                /* School Info */
-                <div className="space-y-3 pt-2 text-xs">
-                  <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">Radio de Cobertura</span>
-                    <p className="text-cyan-400 font-mono font-bold mt-0.5">200 metros perimetrales</p>
+                /* School Detailed Attributes */
+                <div className="space-y-3.5 text-xs">
+                  <div className="p-3 rounded-xl bg-blue-600/10 border border-blue-500/20">
+                    <span className="font-mono text-cyan-400 text-[10px] uppercase font-bold tracking-wider">
+                      ORDENANZA CORREDOR CUIDADO
+                    </span>
+                    <p className="text-white font-bold text-sm mt-0.5">200 metros perimétricos</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Cobertura integral en accesos, paradas de colectivo y veredas escolares.
+                    </p>
                   </div>
+
                   <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">Cámaras Instaladas</span>
-                    <p className="text-slate-200 font-mono mt-0.5">{selectedEntity.cameras_count} dispositivos activos</p>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Código Oficial</span>
+                    <p className="text-slate-200 font-mono font-medium mt-0.5">{selectedEntity.code}</p>
                   </div>
+
                   <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">Responsable</span>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Cámaras Operativas</span>
+                    <p className="text-slate-200 font-mono mt-0.5">{selectedEntity.cameras_count} dispositivos</p>
+                  </div>
+
+                  <div>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Responsable Institucional</span>
                     <p className="text-slate-200 mt-0.5">{selectedEntity.principal_name}</p>
+                  </div>
+
+                  <div className="pt-2">
+                    <Link
+                      href={`/schools`}
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 text-xs font-semibold text-slate-200 hover:bg-white/[0.08] transition-colors"
+                    >
+                      <School className="h-3.5 w-3.5 text-blue-400" />
+                      <span>Ver Ficha Institucional</span>
+                    </Link>
                   </div>
                 </div>
               ) : (
-                /* Camera Info */
-                <div className="space-y-3 pt-2 text-xs">
+                /* Camera Attributes */
+                <div className="space-y-3 text-xs">
                   <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">ID de Dispositivo</span>
-                    <p className="text-blue-400 font-mono mt-0.5">{selectedEntity.identifier}</p>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Identificador</span>
+                    <p className="text-blue-400 font-mono font-bold mt-0.5">{selectedEntity.identifier}</p>
                   </div>
                   <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">Tipo de Stream</span>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Transmisión</span>
                     <p className="text-slate-200 font-mono mt-0.5">{selectedEntity.stream_type.toUpperCase()} · {selectedEntity.resolution}</p>
                   </div>
                   <div>
-                    <span className="font-mono text-slate-500 text-[10px] uppercase">Escuela de Destino</span>
+                    <span className="font-mono text-slate-500 text-[10px] uppercase">Establecimiento</span>
                     <p className="text-slate-200 mt-0.5">{selectedEntity.school_name}</p>
+                  </div>
+
+                  <div className="pt-2">
+                    <Link
+                      href={`/monitor/live?cam=${selectedEntity.id}`}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      <span>Abrir Monitoreo en Vivo</span>
+                    </Link>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="py-12 text-center text-slate-500 text-xs">
-              Haga clic sobre una escuela o cámara en el mapa para ver sus detalles
+            <div className="py-16 text-center text-slate-500 text-xs">
+              Hacé clic sobre un pin en el mapa para inspeccionar el radio o la cámara
             </div>
           )}
+
+          <div className="mt-6 pt-4 border-t border-white/[0.06] text-[11px] text-slate-500 flex items-center justify-between">
+            <span>Catriel GIS v2.1</span>
+            <span className="font-mono text-[10px]">EPSG:4326</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

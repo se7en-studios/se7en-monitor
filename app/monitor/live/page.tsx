@@ -19,12 +19,14 @@ import { MOCK_CAMERAS } from "@/data/mock-data";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
+import { CameraFullscreenModal } from "@/components/camera-fullscreen-modal";
+import { Camera } from "@/types/monitor";
 import { cn } from "@/lib/utils";
 
 export default function LiveMonitoringPage() {
   const [gridLayout, setGridLayout] = useState<"1x1" | "2x2" | "3x3">("2x2");
   const [isMuted, setIsMuted] = useState(true);
-  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [fullscreenCamera, setFullscreenCamera] = useState<Camera | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   const displayedCameras =
@@ -54,7 +56,7 @@ export default function LiveMonitoringPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Audio toggle (Muted by default for privacy & compliance) */}
+          {/* Audio toggle */}
           <button
             onClick={() => setIsMuted(!isMuted)}
             className={cn(
@@ -163,7 +165,6 @@ export default function LiveMonitoringPage() {
 
               {/* Video Frame Container */}
               {isMobileDevice ? (
-                /* Specialized WebRTC receiver for phone transmission */
                 <WebRTCReceiverTile
                   token={cam.publish_token || "demo-mobile-token-se7en"}
                   onOpenPairModal={() => setIsConnectModalOpen(true)}
@@ -172,7 +173,6 @@ export default function LiveMonitoringPage() {
               ) : (
                 <div className="relative aspect-video w-full bg-[#05080e] flex items-center justify-center overflow-hidden">
                   {cam.status === "offline" ? (
-                    /* Professional Offline State */
                     <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500">
                       <VideoOff className="h-8 w-8 text-rose-500/60 mb-2" />
                       <p className="text-xs font-semibold text-rose-400">
@@ -183,9 +183,7 @@ export default function LiveMonitoringPage() {
                       </p>
                     </div>
                   ) : (
-                    /* Active Camera Standby */
                     <div className="relative h-full w-full bg-gradient-to-b from-[#0e1627] to-[#080d17] p-4 flex flex-col justify-between">
-                      {/* Timestamp & Location Overlay */}
                       <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
                         <span className="text-emerald-400">{cam.school_name}</span>
                         <span>{cam.resolution} · {cam.fps} FPS</span>
@@ -203,7 +201,6 @@ export default function LiveMonitoringPage() {
                         </p>
                       </div>
 
-                      {/* Bottom Telemetry Overlay */}
                       <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
                         <span>IP: {cam.ip_address || "DHCP Dinámico"}</span>
                         <span className="text-emerald-400">LATENCIA: 42ms</span>
@@ -221,9 +218,9 @@ export default function LiveMonitoringPage() {
                     Radio 200m
                   </span>
                   <button
-                    onClick={() => setSelectedCameraId(cam.id)}
-                    className="rounded p-1 text-slate-400 hover:bg-white/[0.08] hover:text-white"
-                    title="Maximizar cámara"
+                    onClick={() => setFullscreenCamera(cam)}
+                    className="rounded p-1 text-slate-400 hover:bg-white/[0.08] hover:text-white transition-colors"
+                    title="Maximizar en modo teatro / PTZ"
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
                   </button>
@@ -250,6 +247,11 @@ export default function LiveMonitoringPage() {
       <ConnectMobileModal
         isOpen={isConnectModalOpen}
         onClose={() => setIsConnectModalOpen(false)}
+      />
+
+      <CameraFullscreenModal
+        camera={fullscreenCamera}
+        onClose={() => setFullscreenCamera(null)}
       />
     </div>
   );

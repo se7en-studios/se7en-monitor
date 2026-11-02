@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { ConnectMobileModal } from "./connect-mobile-modal";
 
-export function Topbar() {
+interface TopbarProps {
+  onOpenCommandMenu?: () => void;
+}
+
+export function Topbar({ onOpenCommandMenu }: TopbarProps) {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [time, setTime] = useState("");
 
@@ -35,16 +39,18 @@ export function Topbar() {
   return (
     <>
       <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-white/[0.08] bg-[#070a12]/90 px-6 backdrop-blur-md">
-        {/* Search bar */}
+        {/* Search bar with Ctrl+K shortcut */}
         <div className="flex items-center gap-4 flex-1 max-w-md">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Buscar escuelas, cámaras por ID, zonas de Catriel o incidentes..."
-              className="w-full rounded-full border border-white/[0.08] bg-[#0d121f] py-1.5 pl-9 pr-4 text-xs text-slate-200 placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-            />
-          </div>
+          <button
+            onClick={onOpenCommandMenu}
+            className="group relative flex w-full items-center justify-between rounded-full border border-white/[0.08] bg-[#0d121f] py-1.5 pl-9 pr-3 text-xs text-slate-400 hover:border-blue-500/40 hover:text-slate-200 transition-colors"
+          >
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 group-hover:text-blue-400" />
+            <span className="truncate">Buscar escuelas, cámaras por ID o incidentes...</span>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+              Ctrl+K
+            </kbd>
+          </button>
         </div>
 
         {/* Center / Jurisdiction badge */}
@@ -99,4 +105,3 @@ export function Topbar() {
     </>
   );
 }
-
