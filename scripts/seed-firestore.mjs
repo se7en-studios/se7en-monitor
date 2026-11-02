@@ -149,3 +149,4 @@ seed().catch((err) => {
   console.error("❌ Error en seed:", err);
   process.exit(1);
 });
+
