@@ -157,3 +157,4 @@ export function ConnectMobileModal({ isOpen, onClose }: ConnectMobileModalProps)
     </div>
   );
 }
+

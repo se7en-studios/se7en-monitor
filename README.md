@@ -126,3 +126,4 @@ npm run dev
 - **Etapa 3 (CRM):** CRUD persistente de escuelas, dispositivos e incidentes.
 - **Etapa 4 (Streaming Avanzado):** Pipeline WebRTC automatizado con servidor TURN/STUN para NAT traversal estricto.
 - **Etapa 5 (Expansión):** Georreferenciación dinámica con capas satelitales y reportería exportable a PDF/Excel.
+

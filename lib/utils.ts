@@ -26,3 +26,4 @@ export function formatTimeAgo(dateString: string | Date): string {
   if (diffInSeconds < 86400) return `hace ${Math.floor(diffInSeconds / 3600)} h`;
   return `hace ${Math.floor(diffInSeconds / 86400)} d`;
 }
+

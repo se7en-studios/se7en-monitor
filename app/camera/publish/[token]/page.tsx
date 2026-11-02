@@ -14,6 +14,7 @@ import {
   Wifi,
   Sparkles,
 } from "lucide-react";
+import { startBroadcaster, WebRTCConnectionState } from "@/lib/firebase/webrtc";
 
 export default function MobilePublisherPage({
   params,
@@ -29,8 +30,10 @@ export default function MobilePublisherPage({
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isMuted, setIsMuted] = useState(true);
   const [status, setStatus] = useState<"standby" | "connecting" | "live">("standby");
+  const [connectionState, setConnectionState] = useState<WebRTCConnectionState | null>(null);
+
+  const broadcasterRef = useRef<{ stop: () => void } | null>(null);
 
   // Initialize camera preview
   const startCamera = async (mode: "environment" | "user") => {
@@ -69,6 +72,9 @@ export default function MobilePublisherPage({
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
+      if (broadcasterRef.current) {
+        broadcasterRef.current.stop();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [facingMode]);
@@ -78,18 +84,49 @@ export default function MobilePublisherPage({
     setFacingMode(nextMode);
   };
 
-  const handleStartBroadcast = () => {
+  const handleStartBroadcast = async () => {
+    if (!stream) return;
+
     setStatus("connecting");
-    // WebRTC connection simulation and state preparation for Realtime channel
-    setTimeout(() => {
+    try {
+      const broadcaster = await startBroadcaster({
+        sessionId: token,
+        localStream: stream,
+        onStateChange: (state) => {
+          setConnectionState(state);
+          if (state === "connected") {
+            setStatus("live");
+            setIsBroadcasting(true);
+          } else if (state === "failed" || state === "closed") {
+            setStatus("standby");
+            setIsBroadcasting(false);
+          }
+        },
+        onError: (err) => {
+          setErrorMsg(err.message);
+          setStatus("standby");
+          setIsBroadcasting(false);
+        },
+      });
+
+      broadcasterRef.current = broadcaster;
       setIsBroadcasting(true);
       setStatus("live");
-    }, 1200);
+    } catch (err) {
+      console.error("Broadcast start failed:", err);
+      setStatus("standby");
+      setIsBroadcasting(false);
+    }
   };
 
   const handleStopBroadcast = () => {
+    if (broadcasterRef.current) {
+      broadcasterRef.current.stop();
+      broadcasterRef.current = null;
+    }
     setIsBroadcasting(false);
     setStatus("standby");
+    setConnectionState(null);
   };
 
   return (
@@ -103,7 +140,7 @@ export default function MobilePublisherPage({
           <div>
             <p className="text-xs font-bold leading-tight">SE7EN TRANSMITTER</p>
             <p className="text-[10px] font-mono text-slate-400">
-              Catriel Escuelas · WebRTC
+              Firebase WebRTC · Catriel Escuelas
             </p>
           </div>
         </div>
@@ -117,7 +154,7 @@ export default function MobilePublisherPage({
             </span>
           ) : status === "connecting" ? (
             <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-mono text-amber-400">
-              CONECTANDO...
+              SEÑALIZANDO...
             </span>
           ) : (
             <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono text-slate-400">
@@ -158,8 +195,9 @@ export default function MobilePublisherPage({
 
         {/* Active Broadcast On-Screen Overlay */}
         {isBroadcasting && (
-          <div className="absolute top-3 left-3 z-10 rounded-md bg-black/70 backdrop-blur-md px-2 py-1 text-[10px] font-mono text-emerald-400 border border-emerald-500/30">
-            TOKEN: {token.substring(0, 10)}... · 720p 30FPS
+          <div className="absolute top-3 left-3 z-10 rounded-md bg-black/70 backdrop-blur-md px-2.5 py-1 text-[10px] font-mono text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>ENLACE ACTIVO · {connectionState ? connectionState.toUpperCase() : "OK"}</span>
           </div>
         )}
 
@@ -198,7 +236,7 @@ export default function MobilePublisherPage({
         {/* Security / Educational Privacy Note */}
         <div className="flex items-center justify-center gap-2 text-center text-[11px] text-slate-500">
           <Shield className="h-3.5 w-3.5 text-emerald-500" />
-          <span>Canal P2P Encriptado · Sin almacenamiento en servidor</span>
+          <span>Canal P2P WebRTC Encriptado · Firestore Signaling</span>
         </div>
       </div>
     </div>

@@ -262,3 +262,4 @@ create policy "Public token session access for mobile publication"
     on public.camera_sessions for select
     to anon, authenticated
     using (expires_at > now() and status != 'terminated');
+

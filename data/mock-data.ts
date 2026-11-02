@@ -426,3 +426,4 @@ export const MOCK_METRICS: DashboardMetrics = {
   system_uptime_percentage: 98.8,
   corridor_meters_covered: 1200,
 };
+

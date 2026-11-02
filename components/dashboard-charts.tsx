@@ -158,3 +158,4 @@ export function DashboardCharts() {
     </div>
   );
 }
+

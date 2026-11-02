@@ -143,3 +143,4 @@ export interface DashboardMetrics {
   system_uptime_percentage: number;
   corridor_meters_covered: number;
 }
+

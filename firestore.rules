@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función auxiliar de autenticación
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Perfiles y Usuarios
+    match /profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Escuelas y Establecimientos
+    match /schools/{schoolId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Dispositivos y Cámaras
+    match /cameras/{cameraId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Sesiones de Señalización WebRTC para Celulares (Punto a Punto)
+    // Permite al emisor móvil (que puede ingresar mediante token único sin login previo) 
+    // negociar SDP Offer / Answer y candidatos ICE con el operador del Dashboard.
+    match /camera_sessions/{sessionId} {
+      allow read, write: if true;
+      
+      match /callerCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+      match /calleeCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+    }
+    
+    // Incidentes y Alertas
+    match /incidents/{incidentId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /alerts/{alertId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Mantenimiento y Cuadrillas
+    match /maintenance_tickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // Auditoría inmutable de actividades
+    match /activity_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Solo inserción, inmutable
+    }
+  }
+}

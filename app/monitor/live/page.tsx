@@ -18,6 +18,7 @@ import {
 import { MOCK_CAMERAS } from "@/data/mock-data";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
+import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
 import { cn } from "@/lib/utils";
 
 export default function LiveMonitoringPage() {
@@ -48,7 +49,7 @@ export default function LiveMonitoringPage() {
             Monitoreo en Vivo — Corredor Escolar
           </h1>
           <p className="text-xs text-slate-400">
-            Transmisiones activas punto a punto y telemetría de accesos escolares
+            Transmisiones WebRTC activas y telemetría de accesos escolares de Catriel
           </p>
         </div>
 
@@ -161,71 +162,56 @@ export default function LiveMonitoringPage() {
               </div>
 
               {/* Video Frame Container */}
-              <div className="relative aspect-video w-full bg-[#05080e] flex items-center justify-center overflow-hidden">
-                {isMobileDevice ? (
-                  /* Mobile WebRTC Stream Placeholder or Active Receiver */
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/10 border border-blue-500/20 text-blue-400">
-                      <Smartphone className="h-7 w-7" />
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                      </span>
+              {isMobileDevice ? (
+                /* Specialized WebRTC receiver for phone transmission */
+                <WebRTCReceiverTile
+                  token={cam.publish_token || "demo-mobile-token-se7en"}
+                  onOpenPairModal={() => setIsConnectModalOpen(true)}
+                  isMuted={isMuted}
+                />
+              ) : (
+                <div className="relative aspect-video w-full bg-[#05080e] flex items-center justify-center overflow-hidden">
+                  {cam.status === "offline" ? (
+                    /* Professional Offline State */
+                    <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500">
+                      <VideoOff className="h-8 w-8 text-rose-500/60 mb-2" />
+                      <p className="text-xs font-semibold text-rose-400">
+                        Cámara Sin Señal de Red
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Último ping registrado: hace 2 horas
+                      </p>
                     </div>
-                    <p className="text-xs font-semibold text-white">
-                      Receptor WebRTC para Dispositivo Móvil
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400 max-w-xs leading-tight">
-                      Escaneá el código QR desde tu teléfono para emitir video en vivo a este visor
-                    </p>
-                    <button
-                      onClick={() => setIsConnectModalOpen(true)}
-                      className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-600/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30"
-                    >
-                      <Radio className="h-3.5 w-3.5" />
-                      Vincular Teléfono Celular
-                    </button>
-                  </div>
-                ) : cam.status === "offline" ? (
-                  /* Professional Offline State */
-                  <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500">
-                    <VideoOff className="h-8 w-8 text-rose-500/60 mb-2" />
-                    <p className="text-xs font-semibold text-rose-400">
-                      Cámara Sin Señal de Red
-                    </p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      Último ping registrado: hace 2 horas
-                    </p>
-                  </div>
-                ) : (
-                  /* Active Camera Simulation (No fake footage, realistic test pattern/standby) */
-                  <div className="relative h-full w-full bg-gradient-to-b from-[#0e1627] to-[#080d17] p-4 flex flex-col justify-between">
-                    {/* Timestamp & Location Overlay */}
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
-                      <span className="text-emerald-400">{cam.school_name}</span>
-                      <span>{cam.resolution} · {cam.fps} FPS</span>
-                    </div>
-
-                    <div className="flex flex-col items-center justify-center">
-                      <div className="h-10 w-10 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                        <Video className="h-5 w-5" />
+                  ) : (
+                    /* Active Camera Standby */
+                    <div className="relative h-full w-full bg-gradient-to-b from-[#0e1627] to-[#080d17] p-4 flex flex-col justify-between">
+                      {/* Timestamp & Location Overlay */}
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
+                        <span className="text-emerald-400">{cam.school_name}</span>
+                        <span>{cam.resolution} · {cam.fps} FPS</span>
                       </div>
-                      <p className="mt-2 text-xs font-medium text-slate-300">
-                        {cam.location_detail}
-                      </p>
-                      <p className="text-[10px] font-mono text-slate-500">
-                        Canal Seguro RTSP/WebRTC Encriptado
-                      </p>
-                    </div>
 
-                    {/* Bottom Telemetry Overlay */}
-                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
-                      <span>IP: {cam.ip_address || "DHCP Dinámico"}</span>
-                      <span className="text-emerald-400">LATENCIA: 42ms</span>
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="h-10 w-10 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                          <Video className="h-5 w-5" />
+                        </div>
+                        <p className="mt-2 text-xs font-medium text-slate-300">
+                          {cam.location_detail}
+                        </p>
+                        <p className="text-[10px] font-mono text-slate-500">
+                          Canal Seguro RTSP/WebRTC Encriptado
+                        </p>
+                      </div>
+
+                      {/* Bottom Telemetry Overlay */}
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
+                        <span>IP: {cam.ip_address || "DHCP Dinámico"}</span>
+                        <span className="text-emerald-400">LATENCIA: 42ms</span>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* Card Footer */}
               <div className="flex items-center justify-between bg-[#080c14] px-4 py-2 border-t border-white/[0.04] text-[11px] text-slate-400">
@@ -253,7 +239,7 @@ export default function LiveMonitoringPage() {
         <div className="flex items-center gap-2.5">
           <Shield className="h-4 w-4 text-blue-400 shrink-0" />
           <span>
-            Transmisiones encriptadas de circuito cerrado. Prohibida la redistribución pública según directivas de protección a la niñez y normativas de seguridad escolar.
+            Transmisiones encriptadas WebRTC punto a punto. Prohibida la redistribución pública según directivas de protección a la niñez y normativas de seguridad escolar de Catriel.
           </span>
         </div>
         <span className="font-mono text-[11px] text-slate-500 hidden sm:inline">

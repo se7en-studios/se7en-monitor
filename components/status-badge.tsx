@@ -62,3 +62,4 @@ export function StatusBadge({ status, size = "md", showDot = true }: StatusBadge
     </span>
   );
 }
+
