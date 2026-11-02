@@ -1,0 +1,82 @@
+"use client";
+
+import { useState } from "react";
+import { Bell, CheckCircle2, AlertOctagon, Info, ShieldAlert } from "lucide-react";
+import { MOCK_ALERTS } from "@/data/mock-data";
+import { formatTimeAgo } from "@/lib/utils";
+
+export default function AlertsPage() {
+  const [alerts, setAlerts] = useState(MOCK_ALERTS);
+
+  const toggleAcknowledge = (id: string) => {
+    setAlerts(
+      alerts.map((a) => (a.id === id ? { ...a, acknowledged: !a.acknowledged } : a))
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="font-mono text-xs font-semibold text-rose-400 uppercase tracking-wider">
+            SISTEMA DE NOTIFICACIONES CRÍTICAS
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
+            Alertas del Sistema
+          </h1>
+          <p className="text-xs text-slate-400">
+            Eventos generados por sensores perimetrales y pérdida de enlace en escuelas de Catriel
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {alerts.map((alert) => (
+          <div
+            key={alert.id}
+            className={`rounded-xl border p-4.5 transition-all flex items-start justify-between gap-4 ${
+              alert.severity === "critical"
+                ? "border-rose-500/30 bg-rose-500/5"
+                : alert.severity === "warning"
+                ? "border-amber-500/30 bg-amber-500/5"
+                : "border-blue-500/30 bg-blue-500/5"
+            }`}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="mt-0.5">
+                {alert.severity === "critical" ? (
+                  <AlertOctagon className="h-5 w-5 text-rose-400" />
+                ) : alert.severity === "warning" ? (
+                  <ShieldAlert className="h-5 w-5 text-amber-400" />
+                ) : (
+                  <Info className="h-5 w-5 text-blue-400" />
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white">{alert.title}</h3>
+                  <span className="font-mono text-[10px] text-slate-400">
+                    {formatTimeAgo(alert.timestamp)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">{alert.message}</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => toggleAcknowledge(alert.id)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors shrink-0 ${
+                alert.acknowledged
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/[0.1] bg-white/[0.05] text-slate-300 hover:bg-white/[0.1]"
+              }`}
+            >
+              {alert.acknowledged ? "Reconocida" : "Reconocer"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
