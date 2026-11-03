@@ -1,223 +1,291 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// Paleta de comandos (Ctrl/⌘ K), con el criterio de la de Se7en: agrupada,
+// se maneja con flechas y Enter, la fila activa se invierte (papel sobre tinta)
+// y el foco queda atrapado en el buscador mientras está abierta.
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Search,
-  School,
-  Cctv,
   AlertTriangle,
-  LayoutDashboard,
-  Video,
-  MapPin,
-  Settings,
-  X,
-  ArrowRight,
+  Cctv,
+  CornerDownLeft,
+  School,
+  Search,
 } from "lucide-react";
+import { useAuth } from "@/lib/firebase/auth-context";
 import { useCollection } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
+import { cn } from "@/lib/utils";
+import { navFor } from "@/components/sidebar";
+import { Kbd } from "@/components/ui";
 import type { Camera, Incident, School as SchoolDoc } from "@/types/monitor";
 
-export function CommandMenu() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
+interface CommandItem {
+  id: string;
+  group: string;
+  label: string;
+  hint?: string;
+  icon: ReactNode;
+  href: string;
+}
+
+const PER_GROUP = 6;
+const CAMERA_STATUS: Record<Camera["status"], string> = {
+  online: "En línea",
+  offline: "Sin señal",
+  alerta: "Alerta",
+  mantenimiento: "Mantenimiento",
+};
+
+/** Minúsculas y sin tildes: «cámara» encuentra «camara». */
+const norm = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+export function CommandMenu({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  return open ? <Palette onClose={onClose} /> : null;
+}
+
+function Palette({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const { data: schools } = useCollection<SchoolDoc>("schools");
-  const { data: cameras } = useCollection<Camera>("cameras");
-  const { data: incidents } = useCollection<Incident>("incidents");
+  const { profile } = useAuth();
+  const { data: schools, loading: l1 } = useCollection<SchoolDoc>("schools");
+  const { data: cameras, loading: l2 } = useCollection<Camera>("cameras");
+  const { data: incidents, loading: l3 } = useCollection<Incident>(
+    "incidents",
+    undefined,
+    { enabled: can.handleIncidents(profile?.role) },
+  );
+  const loading = l1 || l2 || l3;
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const list = useRef<HTMLUListElement>(null);
 
-  // Listen to Ctrl+K or Cmd+K
+  // Al cerrar, el foco vuelve a donde estaba (el botón de buscar, por ejemplo).
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setIsOpen((prev) => !prev);
-      }
-      if (e.key === "Escape") {
-        setIsOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const prev = document.activeElement as HTMLElement | null;
+    return () => prev?.focus?.();
   }, []);
 
-  if (!isOpen) return null;
+  const items = useMemo<CommandItem[]>(() => {
+    const words = norm(q.trim()).split(/\s+/).filter(Boolean);
+    const match = (text: string) => words.every((w) => norm(text).includes(w));
+    const pick = (all: CommandItem[]) =>
+      all
+        .filter((i) => match(`${i.label} ${i.hint ?? ""}`))
+        .slice(0, PER_GROUP);
 
-  const filteredSchools = schools.filter(
-    (s) =>
-      s.name.toLowerCase().includes(query.toLowerCase()) ||
-      s.code.toLowerCase().includes(query.toLowerCase())
-  );
+    const sections: CommandItem[] = navFor(profile?.role).flatMap((g) =>
+      g.items.map((it) => {
+        const Icon = it.icon;
+        return {
+          id: `n-${it.href}`,
+          group: "Secciones",
+          label: it.name,
+          hint: g.title,
+          icon: <Icon size={16} />,
+          href: it.href,
+        };
+      }),
+    );
+    if (!words.length) return sections;
 
-  const filteredCameras = cameras.filter(
-    (c) =>
-      c.name.toLowerCase().includes(query.toLowerCase()) ||
-      c.identifier.toLowerCase().includes(query.toLowerCase())
-  );
+    const schoolItems = schools.map((s) => ({
+      id: `s-${s.id}`,
+      group: "Escuelas",
+      label: s.name,
+      hint: `${s.code} · ${s.address}`,
+      icon: <School size={16} />,
+      href: `/schools?school=${encodeURIComponent(s.id)}`,
+    }));
+    const cameraItems = cameras.map((c) => ({
+      id: `c-${c.id}`,
+      group: "Cámaras",
+      label: c.name,
+      hint: `${c.identifier} · ${CAMERA_STATUS[c.status] ?? c.status}`,
+      icon: <Cctv size={16} />,
+      href: can.watchLive(profile?.role)
+        ? `/monitor/live?cam=${encodeURIComponent(c.id)}`
+        : "/monitor/cameras",
+    }));
+    const incidentItems = incidents.map((i) => ({
+      id: `i-${i.id}`,
+      group: "Incidentes",
+      label: i.title,
+      hint: `${i.code} · ${i.school_name}`,
+      icon: <AlertTriangle size={16} />,
+      href: "/incidents",
+    }));
+    return [
+      ...pick(schoolItems),
+      ...pick(cameraItems),
+      ...pick(incidentItems),
+      ...pick(sections),
+    ];
+  }, [q, schools, cameras, incidents, profile?.role]);
 
-  const filteredIncidents = incidents.filter(
-    (i) =>
-      i.title.toLowerCase().includes(query.toLowerCase()) ||
-      i.code.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    list.current
+      ?.querySelector(`[data-i="${active}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
-  const handleSelect = (url: string) => {
-    setIsOpen(false);
-    setQuery("");
-    router.push(url);
+  const go = (item: CommandItem | undefined) => {
+    if (!item) return;
+    onClose();
+    router.push(item.href);
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => Math.min(items.length - 1, a + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(0, a - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      go(items[active]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    } else if (e.key === "Tab") {
+      // ponytail: el buscador es lo único enfocable; las filas se recorren con flechas.
+      e.preventDefault();
+    }
+  };
+
+  let lastGroup = "";
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-md pt-[12vh] p-4 animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl rounded-2xl border border-[var(--line-strong)] bg-panel overflow-hidden">
-        {/* Search Input Bar */}
-        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3.5 bg-[var(--well)]">
-          <Search className="h-5 w-5 text-accent shrink-0" />
+    <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 pt-[10vh] sm:p-4 sm:pt-[12vh]">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Cerrar la búsqueda"
+        onClick={onClose}
+        className="adm-fade absolute inset-0 cursor-default bg-background/80 backdrop-blur-sm"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Buscar o saltar a una sección"
+        className="adm-fade relative w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-panel"
+      >
+        <div className="flex items-center gap-2.5 border-b border-[var(--line)] px-4">
+          <Search size={16} className="shrink-0 text-muted" />
           <input
             autoFocus
-            type="text"
-            placeholder="Buscar escuelas, cámaras, incidentes o comandos (ej: 'CEM 21', 'CAM-204')..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted/60 focus:outline-none"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder="Buscar escuelas, cámaras, incidentes o secciones…"
+            aria-label="Buscar"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-list"
+            aria-activedescendant={
+              items[active] ? `cmd-${items[active].id}` : undefined
+            }
+            className="h-12 min-w-0 flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted/70 focus:outline-none"
           />
-          <button
-            onClick={() => setIsOpen(false)}
-            className="rounded p-1 text-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <Kbd>Esc</Kbd>
         </div>
 
-        {/* Results List */}
-        <div className="max-h-[60vh] overflow-y-auto p-2 space-y-4">
-          {/* Quick Navigation Commands */}
-          {!query && (
-            <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
-                Navegación Rápida
-              </p>
-              <div className="mt-1 space-y-0.5">
-                {[
-                  { name: "Dashboard Central", icon: LayoutDashboard, href: "/" },
-                  { name: "Monitoreo en Vivo (Grilla)", icon: Video, href: "/monitor/live" },
-                  { name: "Mapa de Corredores 200m", icon: MapPin, href: "/map" },
-                  { name: "Catálogo de Dispositivos", icon: Cctv, href: "/monitor/cameras" },
-                  { name: "Configuración y Privacidad", icon: Settings, href: "/settings" },
-                ].map((item, idx) => {
-                  const Icon = item.icon;
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => handleSelect(item.href)}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer transition-colors"
+        <ul
+          id="command-list"
+          ref={list}
+          role="listbox"
+          className="max-h-[min(60vh,420px)] overflow-y-auto p-2"
+        >
+          {items.length === 0 && (
+            <li className="px-3 py-8 text-center text-[13px] text-muted">
+              {loading
+                ? "Buscando en la red de escuelas…"
+                : "Nada coincide con la búsqueda."}
+            </li>
+          )}
+          {items.map((item, i) => {
+            const head = item.group !== lastGroup;
+            lastGroup = item.group;
+            const on = i === active;
+            return (
+              <li key={item.id} role="presentation">
+                {head && (
+                  <p className="adm-label px-2.5 pt-3 pb-1">{item.group}</p>
+                )}
+                <button
+                  type="button"
+                  id={`cmd-${item.id}`}
+                  role="option"
+                  aria-selected={on}
+                  tabIndex={-1}
+                  data-i={i}
+                  onMouseMove={() => setActive(i)}
+                  onClick={() => go(item)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[14px] transition-colors",
+                    on
+                      ? "bg-foreground font-medium text-background"
+                      : "text-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "shrink-0",
+                      on ? "text-background" : "text-muted",
+                    )}
+                  >
+                    {item.icon}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.hint && (
+                    <span
+                      className={cn(
+                        "hidden max-w-[45%] shrink-0 truncate font-mono text-[11px] sm:block",
+                        on ? "text-background/75" : "text-muted",
+                      )}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <Icon className="h-4 w-4 text-accent" />
-                        <span>{item.name}</span>
-                      </div>
-                      <ArrowRight className="h-3.5 w-3.5 text-muted/60" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                      {item.hint}
+                    </span>
+                  )}
+                  {on && (
+                    <CornerDownLeft
+                      size={14}
+                      className="shrink-0 text-background/75"
+                    />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
 
-          {/* Schools Matches */}
-          {filteredSchools.length > 0 && (
-            <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
-                Establecimientos Educativos ({filteredSchools.length})
-              </p>
-              <div className="mt-1 space-y-0.5">
-                {filteredSchools.map((s) => (
-                  <div
-                    key={s.id}
-                    onClick={() => handleSelect(`/schools`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <School className="h-4 w-4 text-accent" />
-                      <div>
-                        <p className="font-semibold text-foreground">{s.name}</p>
-                        <p className="text-[10px] text-muted font-mono">{s.code} · {s.address}</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono text-accent">Radio 200m</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Cameras Matches */}
-          {filteredCameras.length > 0 && (
-            <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
-                Cámaras de Seguridad ({filteredCameras.length})
-              </p>
-              <div className="mt-1 space-y-0.5">
-                {filteredCameras.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => handleSelect(`/monitor/live?focus=${c.id}`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Cctv className="h-4 w-4 text-accent" />
-                      <div>
-                        <p className="font-semibold text-foreground">{c.name}</p>
-                        <p className="text-[10px] text-muted font-mono">{c.identifier} · {c.school_name}</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono text-emerald-400 uppercase">{c.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Incidents Matches */}
-          {filteredIncidents.length > 0 && (
-            <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
-                Incidentes y Novedades ({filteredIncidents.length})
-              </p>
-              <div className="mt-1 space-y-0.5">
-                {filteredIncidents.map((i) => (
-                  <div
-                    key={i.id}
-                    onClick={() => handleSelect(`/incidents`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <AlertTriangle className="h-4 w-4 text-amber-400" />
-                      <div>
-                        <p className="font-semibold text-foreground">{i.title}</p>
-                        <p className="text-[10px] text-muted font-mono">{i.code} · {i.school_name}</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono text-amber-400 uppercase">{i.priority}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer shortcuts */}
-        <div className="border-t border-[var(--line)] bg-[var(--well)] px-4 py-2 flex items-center justify-between text-[11px] text-muted">
-          <div className="flex items-center gap-2">
-            <kbd className="rounded border border-[var(--line)] bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-muted">
-              ESC
-            </kbd>
-            <span>para cerrar</span>
+        <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] bg-[var(--well)] px-4 py-2.5 text-[11px] text-muted">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd> moverse
+            </span>
+            <span className="flex items-center gap-1">
+              <Kbd>↵</Kbd> abrir
+            </span>
+            <span className="hidden items-center gap-1 sm:flex">
+              <Kbd>Esc</Kbd> cerrar
+            </span>
           </div>
-          <span className="font-mono text-[10px]">SE7EN SPOTLIGHT</span>
+          <span className="hidden sm:inline">
+            <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> desde cualquier pantalla
+          </span>
         </div>
       </div>
     </div>
   );
 }
-

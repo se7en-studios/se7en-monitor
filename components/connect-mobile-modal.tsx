@@ -6,10 +6,8 @@ import {
   QrCode,
   Copy,
   Check,
-  ExternalLink,
   X,
   Shield,
-  Radio,
   Wifi,
   Loader2,
 } from "lucide-react";
@@ -20,9 +18,11 @@ import { logAccess } from "@/lib/firebase/audit";
 import {
   createPairing,
   PAIRING_DAYS,
+  usePairingsByCamera,
   type Pairing,
 } from "@/lib/firebase/pairing";
 import { can } from "@/lib/roles";
+import { describeError, useToast } from "@/components/toast";
 import type { Camera } from "@/types/monitor";
 
 interface ConnectMobileModalProps {
@@ -34,7 +34,10 @@ interface ConnectMobileModalProps {
 const DEV_LAN_HOST = "192.168.18.12";
 
 // Dirección https desde la que el celular abre la consola transmisora (sin barra final).
-const CONFIGURED_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+const CONFIGURED_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(
+  /\/+$/,
+  "",
+);
 const PUBLIC_BASE = CONFIGURED_URL.startsWith("https://") ? CONFIGURED_URL : "";
 
 export function ConnectMobileModal({
@@ -42,6 +45,7 @@ export function ConnectMobileModal({
   onClose,
 }: ConnectMobileModalProps) {
   const { profile, user } = useAuth();
+  const toast = useToast();
   const { data: cameras } = useCollection<Camera>("cameras");
   const mobileCameras = useMemo(
     () => cameras.filter((c) => c.device_type === "mobile_webrtc"),
@@ -59,6 +63,7 @@ export function ConnectMobileModal({
   const camera =
     mobileCameras.find((c) => c.id === pickedCameraId) ?? mobileCameras[0];
   const canPair = can.editInfrastructure(profile?.role);
+  const existing = usePairingsByCamera(canPair && isOpen);
 
   const mobileUrl = useMemo(() => {
     if (!pairing || typeof window === "undefined") return "";
@@ -109,6 +114,7 @@ export function ConnectMobileModal({
     setError(null);
     try {
       setPairing(await createPairing(camera, user.uid));
+      toast.success(`Enlace generado para ${camera.identifier}`);
       void logAccess(
         {
           action: "vincular_celular",
@@ -120,7 +126,7 @@ export function ConnectMobileModal({
       );
     } catch (err) {
       console.error("[pairing]", err);
-      setError("No se pudo generar el enlace. Revisá tus permisos.");
+      setError(describeError(err, "No se pudo generar el enlace."));
     } finally {
       setBusy(false);
     }
@@ -133,7 +139,9 @@ export function ConnectMobileModal({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // El portapapeles solo existe en https o localhost: el campo es seleccionable.
-      setError("Este navegador no permite copiar desde esta dirección. Seleccioná el enlace y copialo a mano.");
+      setError(
+        "Este navegador no permite copiar desde esta dirección. Seleccioná el enlace y copialo a mano.",
+      );
     }
   };
 
@@ -203,7 +211,7 @@ export function ConnectMobileModal({
                   {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                   Generar enlace seguro
                 </button>
-                {camera?.publish_token && (
+                {camera && existing.has(camera.id) && (
                   <p className="text-[11px] text-amber-300">
                     Esta cámara ya tenía un enlace: al generar uno nuevo, el
                     anterior deja de funcionar.
@@ -228,9 +236,22 @@ export function ConnectMobileModal({
                   <p className="mt-4 max-w-xs text-xs leading-relaxed text-foreground/85">
                     Escaneá el código con el celular que va a transmitir. El
                     enlace vale {PAIRING_DAYS} días (hasta el{" "}
-                    {pairing.expiresAt.toLocaleDateString("es-AR")}) y funciona
-                    para esta cámara.
+                    {pairing.expiresAt.toLocaleDateString("es-AR")}), funciona
+                    para esta cámara y queda atado al primer celular que lo
+                    abre: no lo abras en esta computadora.
                   </p>
+
+                  {mobileUrl.startsWith("http://") && (
+                    <p
+                      role="alert"
+                      className="mt-3 max-w-xs text-[12px] leading-relaxed text-amber-300"
+                    >
+                      Este enlace no es https: la mayoría de los celulares no
+                      van a permitir la cámara. Configurá NEXT_PUBLIC_APP_URL
+                      con la dirección https del sistema y generá el enlace de
+                      nuevo.
+                    </p>
+                  )}
 
                   {!PUBLIC_BASE &&
                     typeof window !== "undefined" &&
@@ -273,15 +294,6 @@ export function ConnectMobileModal({
                       )}
                       {copied ? "Copiado" : "Copiar"}
                     </button>
-                    <a
-                      href={mobileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Abrir en pestaña nueva"
-                      className="inline-flex items-center justify-center rounded-full border border-[var(--line)] p-2 text-foreground/85 hover:bg-white/[0.08]"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
                   </div>
                 </div>
               </>
@@ -314,17 +326,6 @@ export function ConnectMobileModal({
           >
             Cerrar
           </button>
-          {pairing && (
-            <a
-              href={mobileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background transition-colors hover:bg-foreground"
-            >
-              <Radio className="h-3.5 w-3.5" />
-              Abrir consola transmisora
-            </a>
-          )}
         </div>
       </div>
     </div>

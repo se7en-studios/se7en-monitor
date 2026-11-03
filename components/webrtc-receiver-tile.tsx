@@ -1,121 +1,152 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Expand, Loader2, RefreshCw, Smartphone, WifiOff } from "lucide-react";
 import {
-  Smartphone,
-  Radio,
-  Video,
-  Volume2,
-  VolumeX,
-  RefreshCw,
-  ExternalLink,
-} from "lucide-react";
-import { startViewer, WebRTCConnectionState } from "@/lib/firebase/webrtc";
-import { isFirebaseConfigured } from "@/lib/firebase/config";
+  describeSignalingError,
+  startViewer,
+  type PeerHandle,
+  type PeerStatus,
+} from "@/lib/firebase/webrtc";
+import { btnSecondary } from "@/components/ui";
+
+/** Estado visible del receptor: el de la conexión, o error. */
+export type ReceiverStatus = PeerStatus | "error";
 
 interface WebRTCReceiverTileProps {
-  token: string;
-  onOpenPairModal: () => void;
+  /** Id de la cámara: la sesión de señalización es `camera_sessions/{cameraId}`. */
+  cameraId: string;
   isMuted?: boolean;
+  /** Avisa cada cambio de estado (para mostrar «EN VIVO» solo si llega video). */
+  onStatusChange?: (status: ReceiverStatus) => void;
+  /** Abre la vinculación (solo si el rol puede vincular). */
+  onOpenPairModal?: () => void;
 }
 
+const MESSAGES: Record<Exclude<ReceiverStatus, "live">, string> = {
+  waiting:
+    "El celular no está transmitiendo. Abrí la consola transmisora en el teléfono vinculado (si el enlace venció o fue revocado, hay que generar uno nuevo).",
+  connecting: "Conectando con el celular…",
+  taken:
+    "Esta cámara se está viendo en otra pantalla. Se puede ver en un solo lugar a la vez.",
+  error: "",
+};
+
 export function WebRTCReceiverTile({
-  token,
-  onOpenPairModal,
+  cameraId,
   isMuted = true,
+  onStatusChange,
+  onOpenPairModal,
 }: WebRTCReceiverTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [connectionState, setConnectionState] = useState<WebRTCConnectionState | null>(null);
-  const [isReceiving, setIsReceiving] = useState(false);
+  const [status, setStatus] = useState<ReceiverStatus>("connecting");
+  const [errorText, setErrorText] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const notify = useRef(onStatusChange);
+  notify.current = onStatusChange;
+
+  useEffect(() => notify.current?.(status), [status]);
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
-
-    if (isFirebaseConfigured && token) {
-      startViewer({
-        sessionId: token,
-        onRemoteStream: (stream) => {
-          setRemoteStream(stream);
-          setIsReceiving(true);
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        },
-        onStateChange: (state) => {
-          setConnectionState(state);
-          if (state === "disconnected" || state === "failed" || state === "closed") {
-            setIsReceiving(false);
-          }
-        },
-        onError: (err) => {
-          console.error("Error en receptor WebRTC:", err);
-          setIsReceiving(false);
-        },
-      }).then((handle) => {
-        cleanup = handle.stop;
-      });
-    }
-
-    return () => {
-      if (cleanup) cleanup();
+    // `cancelled` cubre el desmontaje antes de que startViewer termine (StrictMode
+    // monta dos veces): si llega tarde, se corta en el acto y no quedan listeners vivos.
+    let cancelled = false;
+    let handle: PeerHandle | null = null;
+    const fail = (err: unknown) => {
+      if (cancelled) return;
+      console.error("[webrtc] receptor", err);
+      setErrorText(describeSignalingError(err));
+      setStatus("error");
     };
-  }, [token]);
+    setStatus("connecting");
+    startViewer({
+      cameraId,
+      onRemoteStream: (stream) => {
+        if (!cancelled && videoRef.current) videoRef.current.srcObject = stream;
+      },
+      onStatus: (s) => !cancelled && setStatus(s),
+      onError: fail,
+    })
+      .then((h) => (cancelled ? h.stop() : (handle = h)))
+      .catch(fail);
+    return () => {
+      cancelled = true;
+      handle?.stop();
+    };
+  }, [cameraId, attempt]);
+
+  const isLive = status === "live";
 
   return (
-    <div className="relative aspect-video w-full bg-background flex items-center justify-center overflow-hidden">
-      {/* Remote Video Stream Element */}
+    <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={isMuted}
-        className={`h-full w-full object-cover ${isReceiving ? "block" : "hidden"}`}
+        className={isLive ? "h-full w-full object-contain" : "hidden"}
       />
-
-      {/* When Stream is Active: Overlay Telemetry */}
-      {isReceiving && (
-        <div className="absolute inset-0 pointer-events-none p-3 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-[10px] font-mono text-foreground bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded w-fit">
-            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-              ENLACE MÓVIL EN VIVO (P2P)
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between text-[9px] font-mono text-foreground/85 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded">
-            <span>SEÑALIZACIÓN: FIRESTORE OK</span>
-            <span className="text-accent">FPS: 30 · WEBRTC DIRECT</span>
-          </div>
-        </div>
-      )}
-
-      {/* Standby / Waiting State */}
-      {!isReceiving && (
-        <div className="flex flex-col items-center justify-center p-6 text-center">
-          <div className="relative mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft border border-accent/20 text-accent">
-            <Smartphone className="h-7 w-7" />
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-accent"></span>
-            </span>
-          </div>
-          <p className="text-xs font-semibold text-foreground">
-            Receptor WebRTC para Dispositivo Móvil
-          </p>
-          <p className="mt-1 text-[11px] text-muted max-w-xs leading-tight">
-            Escaneá el código QR desde tu teléfono para emitir video en vivo a este visor
-          </p>
-          <button
-            onClick={onOpenPairModal}
-            className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30 transition-colors"
-          >
-            <Radio className="h-3.5 w-3.5" />
-            Vincular Teléfono Celular
-          </button>
-        </div>
+      {isLive ? (
+        <button
+          type="button"
+          onClick={() => void videoRef.current?.requestFullscreen?.()}
+          aria-label="Ver en pantalla completa"
+          className="focus-ring absolute right-2 bottom-2 rounded-full bg-black/60 p-2 text-white/85 hover:text-white"
+        >
+          <Expand className="h-4 w-4" />
+        </button>
+      ) : (
+        <ReceiverPlaceholder
+          status={status}
+          message={status === "error" ? errorText : MESSAGES[status]}
+          onRetry={() => setAttempt((n) => n + 1)}
+          onOpenPairModal={onOpenPairModal}
+        />
       )}
     </div>
   );
 }
 
+function ReceiverPlaceholder({
+  status,
+  message,
+  onRetry,
+  onOpenPairModal,
+}: {
+  status: Exclude<ReceiverStatus, "live">;
+  message: string;
+  onRetry: () => void;
+  onOpenPairModal?: () => void;
+}) {
+  const icon =
+    status === "connecting" ? (
+      <Loader2 className="h-6 w-6 animate-spin" />
+    ) : status === "error" ? (
+      <WifiOff className="h-6 w-6 text-red-400" />
+    ) : (
+      <Smartphone className="h-6 w-6" />
+    );
+  return (
+    <div className="flex flex-col items-center gap-2 p-5 text-center text-muted">
+      {icon}
+      <p className="max-w-xs text-[12px] leading-snug">{message}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {(status === "error" || status === "taken" || status === "waiting") && (
+          <button type="button" className={btnSecondary} onClick={onRetry}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            {status === "taken" ? "Ver en esta pantalla" : "Reintentar"}
+          </button>
+        )}
+        {status === "waiting" && onOpenPairModal && (
+          <button
+            type="button"
+            className={btnSecondary}
+            onClick={onOpenPairModal}
+          >
+            Vincular celular
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

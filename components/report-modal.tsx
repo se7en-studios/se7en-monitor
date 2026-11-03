@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { btnGhost, btnPrimary } from "@/components/ui";
 import { X, Printer } from "lucide-react";
 import { useCollection } from "@/lib/firebase/data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { can } from "@/lib/roles";
 import { REPORT_KINDS, type ReportKind } from "@/lib/reports";
 import type { Camera, Incident, School } from "@/types/monitor";
 import {
@@ -22,7 +26,19 @@ interface ReportModalProps {
 export function ReportModal({ kind, onClose }: ReportModalProps) {
   const { data: schools } = useCollection<School>("schools");
   const { data: cameras } = useCollection<Camera>("cameras");
-  const { data: incidents } = useCollection<Incident>("incidents");
+  const { profile } = useAuth();
+  const canIncidents = can.handleIncidents(profile?.role);
+  const { data: incidents } = useCollection<Incident>("incidents", undefined, {
+    enabled: canIncidents,
+  });
+
+  // Escape cierra el informe.
+  useEffect(() => {
+    if (!kind) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kind, onClose]);
 
   if (!kind || typeof document === "undefined") return null;
 
@@ -31,30 +47,40 @@ export function ReportModal({ kind, onClose }: ReportModalProps) {
 
   // En un portal para que, al imprimir, salga solo el documento (ver @media print en globals.css).
   return createPortal(
-    <div className="report-print-root fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+    <div
+      className="report-print-root fixed inset-0 z-50 flex items-center justify-center bg-background/90 p-2 backdrop-blur-md sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div className="report-frame relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-panel">
-        <div className="print-hidden flex items-center justify-between border-b border-[var(--line)] bg-[var(--well)] px-6 py-3.5">
-          <span className="adm-label">Informe · Municipio de Catriel</span>
-          <div className="flex items-center gap-3">
+        <div className="print-hidden flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--well)] px-4 py-3 sm:px-6">
+          <span className="adm-label hidden sm:inline">
+            Informe · Municipio de Catriel
+          </span>
+          <div className="ml-auto flex items-center gap-2">
             <button
+              type="button"
               onClick={() => window.print()}
-              className="focus-ring inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-background transition-colors hover:bg-foreground"
+              className={btnPrimary}
             >
               <Printer className="h-4 w-4" />
-              <span>Imprimir / Guardar PDF</span>
+              Imprimir o guardar PDF
             </button>
             <button
+              type="button"
+              autoFocus
               onClick={onClose}
-              aria-label="Cerrar"
-              className="rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground"
+              aria-label="Cerrar el informe"
+              className={`${btnGhost} h-9 w-9 px-0`}
             >
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
 
-        <div className="report-scroll flex-1 space-y-6 overflow-y-auto bg-background p-8 text-foreground">
-          <header className="flex items-start justify-between gap-6 border-b border-[var(--line)] pb-6">
+        <div className="report-scroll flex-1 space-y-6 overflow-y-auto bg-background p-5 text-foreground sm:p-8">
+          <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] pb-6 sm:gap-6">
             <div>
               <p className="adm-label">
                 Se7en Monitor · Corredor Escolar Cuidado
@@ -79,7 +105,10 @@ export function ReportModal({ kind, onClose }: ReportModalProps) {
             <CoverageSection schools={schools} cameras={cameras} />
           )}
           {kind === "availability" && (
-            <AvailabilitySection cameras={cameras} incidents={incidents} />
+            <AvailabilitySection
+              cameras={cameras}
+              incidents={canIncidents ? incidents : null}
+            />
           )}
           {kind === "audit" && <AuditSection />}
 

@@ -1,275 +1,305 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  Grid2X2,
-  Grid3X3,
-  Maximize2,
-  Volume2,
-  VolumeX,
-  Radio,
-  Video,
-  VideoOff,
-  Smartphone,
-  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Lock,
   Shield,
-  RefreshCw,
+  Smartphone,
+  Video,
 } from "lucide-react";
-import { useCollection, byId } from "@/lib/firebase/data";
-import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection } from "@/lib/firebase/data";
+import { useAuth, type Profile } from "@/lib/firebase/auth-context";
 import { logAccess } from "@/lib/firebase/audit";
-import { StatusBadge } from "@/components/status-badge";
+import { can } from "@/lib/roles";
+import { CameraTile } from "@/components/camera-tile";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
-import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
-import { CameraFullscreenModal } from "@/components/camera-fullscreen-modal";
-import { Camera } from "@/types/monitor";
-import { cn, formatTimeAgo } from "@/lib/utils";
+import {
+  EmptyState,
+  PageHeader,
+  Segmented,
+  Skeleton,
+  btnPrimary,
+  btnSecondary,
+  input,
+} from "@/components/ui";
+import type { Camera } from "@/types/monitor";
+import { cn } from "@/lib/utils";
+
+type Layout = "1" | "4" | "9";
+const LAYOUTS = [
+  { id: "1", label: "1x1" },
+  { id: "4", label: "2x2" },
+  { id: "9", label: "3x3" },
+] as const;
+const GRID: Record<Layout, string> = {
+  "1": "grid-cols-1 max-w-4xl mx-auto",
+  "4": "grid-cols-1 md:grid-cols-2",
+  "9": "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
+};
+
+/** Primero los celulares (los únicos con video real), después por identificador. */
+const sortForLive = (a: Camera, b: Camera) =>
+  Number(b.device_type === "mobile_webrtc") -
+    Number(a.device_type === "mobile_webrtc") ||
+  a.identifier.localeCompare(b.identifier);
 
 export default function LiveMonitoringPage() {
-  const [gridLayout, setGridLayout] = useState<"1x1" | "2x2" | "3x3">("2x2");
-  const [isMuted, setIsMuted] = useState(true);
-  const [fullscreenCamera, setFullscreenCamera] = useState<Camera | null>(null);
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-
-  const { data: cameras } = useCollection<Camera>("cameras", byId);
   const { profile } = useAuth();
+  if (!can.watchLive(profile?.role)) return <NoLiveAccess />;
+  return <LiveGrid profile={profile} />;
+}
 
-  // Entrar al monitoreo en vivo queda registrado (una vez por visita a la pantalla).
+/** Técnicos y solo lectura no ven video en vivo (las reglas tampoco se lo permiten). */
+function NoLiveAccess() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Corredor escolar"
+        title="Monitoreo en"
+        accent="vivo"
+      />
+      <EmptyState
+        icon={<Lock className="h-6 w-6" />}
+        title="Tu rol no puede ver video en vivo"
+      >
+        El video de las cámaras solo lo ven los operadores de monitoreo y la
+        administración. Si necesitás acceso, pedíselo a un Super Admin.
+      </EmptyState>
+    </div>
+  );
+}
+
+function LiveGrid({ profile }: { profile: Profile | null }) {
+  const canPair = can.editInfrastructure(profile?.role);
+  const { data: cameras, loading } = useCollection<Camera>(
+    "cameras",
+    sortForLive,
+  );
+  const [layout, setLayout] = useState<Layout>("4");
+  const [schoolId, setSchoolId] = useState("all");
+  const [page, setPage] = useState(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isConnectOpen, setIsConnectOpen] = useState(false);
+
+  useLiveAccessLog(profile);
+  useInitialCameraFromUrl(setExpandedId);
+
+  const schools = useMemo(
+    () =>
+      [
+        ...new Map(
+          cameras.map((c) => [c.school_id, c.school_name ?? c.school_id]),
+        ),
+      ].sort((a, b) => a[1].localeCompare(b[1])),
+    [cameras],
+  );
+  const filtered = cameras.filter(
+    (c) => schoolId === "all" || c.school_id === schoolId,
+  );
+  const expanded = cameras.find((c) => c.id === expandedId) ?? null;
+  useExpandedAccessLog(expanded, profile);
+
+  const size = Number(layout);
+  const pages = Math.max(1, Math.ceil(filtered.length / size));
+  const current = Math.min(page, pages - 1);
+  const visible = expanded
+    ? [expanded]
+    : filtered.slice(current * size, (current + 1) * size);
+
+  const changeLayout = (l: Layout) => {
+    setLayout(l);
+    setPage(0);
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Corredor escolar"
+        title="Monitoreo en"
+        accent="vivo"
+        right={
+          canPair && (
+            <button
+              className={btnPrimary}
+              onClick={() => setIsConnectOpen(true)}
+            >
+              <Smartphone className="h-4 w-4" /> Vincular celular
+            </button>
+          )
+        }
+      >
+        Los celulares vinculados transmiten video en vivo. Las cámaras IP están
+        registradas, pero su video todavía no está integrado al panel.
+      </PageHeader>
+
+      {!expanded && cameras.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented
+            label="Vista"
+            value={layout}
+            onChange={changeLayout}
+            options={LAYOUTS}
+          />
+          <select
+            aria-label="Filtrar por escuela"
+            className={cn(input, "w-auto rounded-full")}
+            value={schoolId}
+            onChange={(e) => {
+              setSchoolId(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="all">Todas las escuelas</option>
+            {schools.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <Pager
+            page={current}
+            pages={pages}
+            total={filtered.length}
+            onChange={setPage}
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className={cn("grid gap-4", GRID["4"])}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="aspect-video" />
+          ))}
+        </div>
+      ) : cameras.length === 0 ? (
+        <EmptyState
+          icon={<Video className="h-6 w-6" />}
+          title="Todavía no hay cámaras registradas"
+          action={
+            canPair && (
+              <Link href="/monitor/cameras" className={btnSecondary}>
+                Ir a Cámaras
+              </Link>
+            )
+          }
+        >
+          Dá de alta una cámara (o un celular) en la sección Cámaras para verla
+          acá.
+        </EmptyState>
+      ) : filtered.length === 0 ? (
+        <EmptyState title="Esta escuela no tiene cámaras" />
+      ) : (
+        <div className={cn("grid gap-4", expanded ? GRID["1"] : GRID[layout])}>
+          {visible.map((cam) => (
+            <CameraTile
+              key={cam.id}
+              camera={cam}
+              isExpanded={cam.id === expandedId}
+              onToggleExpand={() =>
+                setExpandedId(cam.id === expandedId ? null : cam.id)
+              }
+              onOpenPairModal={
+                canPair ? () => setIsConnectOpen(true) : undefined
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      <p className="flex items-start gap-2 text-[12px] text-muted">
+        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+        El video va directo del celular a esta pantalla y no se graba. Cada vez
+        que alguien abre esta vista o amplía una cámara queda registrado en la
+        auditoría.
+      </p>
+
+      <ConnectMobileModal
+        isOpen={isConnectOpen}
+        onClose={() => setIsConnectOpen(false)}
+      />
+    </div>
+  );
+}
+
+function Pager({
+  page,
+  pages,
+  total,
+  onChange,
+}: {
+  page: number;
+  pages: number;
+  total: number;
+  onChange: (p: number) => void;
+}) {
+  if (pages <= 1) return <span className="adm-label">{total} cámaras</span>;
+  return (
+    <div className="flex items-center gap-2 text-[12px] text-muted">
+      <button
+        className={btnSecondary}
+        aria-label="Página anterior"
+        disabled={page === 0}
+        onClick={() => onChange(page - 1)}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span>
+        Página {page + 1} de {pages} · {total} cámaras
+      </span>
+      <button
+        className={btnSecondary}
+        aria-label="Página siguiente"
+        disabled={page >= pages - 1}
+        onClick={() => onChange(page + 1)}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+type Who = { id: string; full_name: string; role: string } | null;
+
+/** Entrar al monitoreo en vivo queda registrado (una vez por visita a la pantalla). */
+function useLiveAccessLog(profile: Who) {
+  const id = profile?.id;
   useEffect(() => {
     if (!profile) return;
     void logAccess(
       { action: "ver_monitoreo_en_vivo" },
-      { name: profile.full_name, role: profile.role }
+      { name: profile.full_name, role: profile.role },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+  }, [id]);
+}
 
-  const displayedCameras =
-    gridLayout === "1x1"
-      ? cameras.slice(0, 1)
-      : gridLayout === "2x2"
-      ? cameras.slice(0, 4)
-      : cameras.slice(0, 9);
+/** Ampliar una cámara queda registrado como «vio una cámara». */
+function useExpandedAccessLog(camera: Camera | null, profile: Who) {
+  const camId = camera?.id;
+  const id = profile?.id;
+  useEffect(() => {
+    if (!camera || !profile) return;
+    void logAccess(
+      {
+        action: "ver_camara",
+        camera_id: camera.id,
+        camera_name: camera.name,
+        school_name: camera.school_name,
+      },
+      { name: profile.full_name, role: profile.role },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camId, id]);
+}
 
-  return (
-    <div className="space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-live-pulse" />
-            <span className="font-mono text-xs font-bold text-rose-400 uppercase tracking-wider">
-              CENTRO DE MONITOREO EN TIEMPO REAL
-            </span>
-          </div>
-          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
-            Monitoreo en Vivo — Corredor Escolar
-          </h1>
-          <p className="text-xs text-muted">
-            Transmisiones WebRTC activas y telemetría de accesos escolares de Catriel
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Audio toggle */}
-          <button
-            onClick={() => setIsMuted(!isMuted)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-              isMuted
-                ? "border-[var(--line)] bg-panel text-muted hover:text-foreground"
-                : "border-accent/30 bg-accent/20 text-accent"
-            )}
-            title="Audio silenciado por defecto por directiva de privacidad"
-          >
-            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-            <span className="hidden sm:inline">
-              {isMuted ? "Audio Silenciado" : "Audio Activo"}
-            </span>
-          </button>
-
-          {/* Grid Layout Switcher */}
-          <div className="flex items-center rounded-lg border border-[var(--line)] bg-panel p-1">
-            <button
-              onClick={() => setGridLayout("1x1")}
-              className={cn(
-                "rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
-                gridLayout === "1x1"
-                  ? "bg-accent text-background"
-                  : "text-muted hover:text-foreground"
-              )}
-            >
-              1x1
-            </button>
-            <button
-              onClick={() => setGridLayout("2x2")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
-                gridLayout === "2x2"
-                  ? "bg-accent text-background"
-                  : "text-muted hover:text-foreground"
-              )}
-            >
-              <Grid2X2 className="h-3.5 w-3.5" />
-              <span>2x2</span>
-            </button>
-            <button
-              onClick={() => setGridLayout("3x3")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
-                gridLayout === "3x3"
-                  ? "bg-accent text-background"
-                  : "text-muted hover:text-foreground"
-              )}
-            >
-              <Grid3X3 className="h-3.5 w-3.5" />
-              <span>3x3</span>
-            </button>
-          </div>
-
-          {/* Quick Mobile Broadcaster Button */}
-          <button
-            onClick={() => setIsConnectModalOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            <Smartphone className="h-4 w-4" />
-            <span className="hidden md:inline">Transmitir Celular</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Grid of Cameras */}
-      <div
-        className={cn(
-          "grid gap-4",
-          gridLayout === "1x1" && "grid-cols-1 max-w-4xl mx-auto",
-          gridLayout === "2x2" && "grid-cols-1 md:grid-cols-2",
-          gridLayout === "3x3" && "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-        )}
-      >
-        {displayedCameras.map((cam) => {
-          const isMobileDevice = cam.device_type === "mobile_webrtc";
-
-          return (
-            <div
-              key={cam.id}
-              className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-panel transition-all hover:border-[var(--line-strong)]"
-            >
-              {/* Camera Header Bar */}
-              <div className="flex items-center justify-between border-b border-[var(--line)] bg-background px-4 py-2.5 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-foreground text-xs">
-                    {cam.identifier}
-                  </span>
-                  <span className="text-muted">|</span>
-                  <span className="text-foreground/85 font-medium truncate max-w-[150px]">
-                    {cam.name}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {cam.is_live && (
-                    <span className="flex items-center gap-1 rounded bg-rose-500/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-rose-400 border border-rose-500/30">
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-live-pulse" />
-                      LIVE
-                    </span>
-                  )}
-                  <StatusBadge status={cam.status} size="sm" showDot={false} />
-                </div>
-              </div>
-
-              {/* Video Frame Container */}
-              {isMobileDevice ? (
-                <WebRTCReceiverTile
-                  token={cam.publish_token ?? ""}
-                  onOpenPairModal={() => setIsConnectModalOpen(true)}
-                  isMuted={isMuted}
-                />
-              ) : (
-                <div className="relative aspect-video w-full bg-background flex items-center justify-center overflow-hidden">
-                  {cam.status === "offline" ? (
-                    <div className="flex flex-col items-center justify-center p-6 text-center text-muted">
-                      <VideoOff className="h-8 w-8 text-rose-500/60 mb-2" />
-                      <p className="text-xs font-semibold text-rose-400">
-                        Cámara Sin Señal de Red
-                      </p>
-                      <p className="text-[10px] text-muted mt-0.5">
-                        {cam.last_heartbeat
-                          ? `Última señal: ${formatTimeAgo(cam.last_heartbeat)}`
-                          : "Todavía no transmitió"}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="relative h-full w-full bg-panel p-4 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-muted bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
-                        <span className="text-emerald-400">{cam.school_name}</span>
-                        <span>{cam.resolution} · {cam.fps} FPS</span>
-                      </div>
-
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="h-10 w-10 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                          <Video className="h-5 w-5" />
-                        </div>
-                        <p className="mt-2 text-xs font-medium text-foreground/85">
-                          {cam.location_detail}
-                        </p>
-                        <p className="text-[10px] font-mono text-muted">
-                          Canal Seguro RTSP/WebRTC Encriptado
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[9px] font-mono text-muted bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
-                        <span>IP: {cam.ip_address || "DHCP Dinámico"}</span>
-                        <span className="text-emerald-400">LATENCIA: 42ms</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Card Footer */}
-              <div className="flex items-center justify-between bg-background px-4 py-2 border-t border-[var(--line)] text-[11px] text-muted">
-                <span className="truncate">{cam.school_name}</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-muted">
-                    Radio 200m
-                  </span>
-                  <button
-                    onClick={() => setFullscreenCamera(cam)}
-                    className="rounded p-1 text-muted hover:bg-white/[0.08] hover:text-foreground transition-colors"
-                    title="Maximizar en modo teatro / PTZ"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Security Statement */}
-      <div className="rounded-xl border border-[var(--line)] bg-panel p-4 text-xs text-muted flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Shield className="h-4 w-4 text-accent shrink-0" />
-          <span>
-            Transmisiones encriptadas WebRTC punto a punto. Prohibida la redistribución pública según directivas de protección a la niñez y normativas de seguridad escolar de Catriel.
-          </span>
-        </div>
-        <span className="font-mono text-[11px] text-muted hidden sm:inline">
-          Catriel Seguro 2026
-        </span>
-      </div>
-
-      <ConnectMobileModal
-        isOpen={isConnectModalOpen}
-        onClose={() => setIsConnectModalOpen(false)}
-      />
-
-      <CameraFullscreenModal
-        camera={fullscreenCamera}
-        onClose={() => setFullscreenCamera(null)}
-      />
-    </div>
-  );
+/** `/monitor/live?cam=<id>` (desde Cámaras) abre esa cámara ampliada. */
+function useInitialCameraFromUrl(setExpandedId: (id: string) => void) {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cam = params.get("cam") ?? params.get("focus");
+    if (cam) setExpandedId(cam);
+  }, [setExpandedId]);
 }

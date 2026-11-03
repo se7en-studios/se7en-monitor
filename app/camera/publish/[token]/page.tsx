@@ -1,244 +1,248 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
+import { Radio, Shield, Square, SwitchCamera } from "lucide-react";
+import { claimPairing, type ClaimResult } from "@/lib/firebase/device-pairing";
 import {
-  Camera,
-  SwitchCamera,
-  Radio,
-  Square,
-  Shield,
-  AlertCircle,
-  Volume2,
-  VolumeX,
-  Battery,
-  Wifi,
-  Sparkles,
-} from "lucide-react";
-import { startBroadcaster, WebRTCConnectionState } from "@/lib/firebase/webrtc";
+  describeSignalingError,
+  startBroadcaster,
+  toError,
+  type BroadcasterHandle,
+  type DevicePairing,
+} from "@/lib/firebase/webrtc";
+import {
+  Blocker,
+  StatusPill,
+  blockerFor,
+  isInsecure,
+  type Broadcast,
+  type LinkState,
+} from "./parts";
+
+type Facing = "environment" | "user";
+
+/** Mensaje claro cuando el navegador no da la cámara. */
+function describeCameraError(err: unknown): string {
+  const name = (err as { name?: string })?.name ?? "";
+  if (name === "NotAllowedError" || name === "SecurityError")
+    return "Bloqueaste el permiso de cámara. Tocá el candado de la barra de direcciones, permití la cámara y volvé a intentar.";
+  if (name === "NotFoundError" || name === "OverconstrainedError")
+    return "No encontramos una cámara en este dispositivo.";
+  if (name === "NotReadableError")
+    return "Otra aplicación está usando la cámara. Cerrala y volvé a intentar.";
+  return "No se pudo abrir la cámara. Volvé a intentar.";
+}
+
+/** Abre el enlace: sesión anónima + reclamo del enlace para este celular. */
+function useDeviceLink(token: string): ClaimResult | null {
+  const [result, setResult] = useState<ClaimResult | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void claimPairing(token).then((r) => !cancelled && setResult(r));
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+  return result;
+}
+
+function useCameraPreview(enabled: boolean, facing: Facing) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!enabled || isInsecure()) return;
+    // `active` es local a esta corrida del efecto: el cleanup apaga justo esta cámara.
+    let active: MediaStream | null = null;
+    let cancelled = false;
+    setError(null);
+    navigator.mediaDevices
+      .getUserMedia({
+        video: {
+          facingMode: facing,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false, // sin audio: privacidad de los chicos
+      })
+      .then((s) => {
+        if (cancelled) return s.getTracks().forEach((t) => t.stop());
+        active = s;
+        setStream(s);
+        if (videoRef.current) videoRef.current.srcObject = s;
+      })
+      .catch((err) => {
+        console.error("[publicar] cámara", err);
+        if (!cancelled) setError(describeCameraError(err));
+      });
+    return () => {
+      cancelled = true;
+      active?.getTracks().forEach((t) => t.stop());
+      setStream(null);
+    };
+  }, [enabled, facing, attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  return { videoRef, stream, error, retry };
+}
+
+/**
+ * Transmisión del celular. Usa refs para no depender de closures viejas: cambiar de
+ * cámara reemplaza la pista (replaceTrack) sin cortar, y al salir se corta todo.
+ */
+function useBroadcast(
+  pairing: DevicePairing | null,
+  stream: MediaStream | null,
+) {
+  const [status, setStatus] = useState<Broadcast>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const handleRef = useRef<BroadcasterHandle | null>(null);
+  const streamRef = useRef(stream);
+  const generation = useRef(0); // cada start/stop invalida los anteriores
+
+  const halt = useCallback(() => {
+    generation.current += 1;
+    handleRef.current?.stop();
+    handleRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    streamRef.current = stream;
+    if (stream) handleRef.current?.setStream(stream);
+  }, [stream]);
+
+  useEffect(() => halt, [halt]);
+
+  const fail = useCallback(
+    (err: Error) => {
+      console.error("[publicar] transmisión", err);
+      halt();
+      setError(describeSignalingError(err));
+      setStatus("error");
+    },
+    [halt],
+  );
+
+  const start = useCallback(async () => {
+    const initial = streamRef.current;
+    if (!pairing || !initial || handleRef.current) return;
+    const gen = ++generation.current;
+    setError(null);
+    setStatus("connecting");
+    try {
+      const handle = await startBroadcaster({
+        pairing,
+        localStream: initial,
+        onStatus: (s) => gen === generation.current && setStatus(s),
+        onError: (err) => gen === generation.current && fail(err),
+      });
+      if (gen !== generation.current) return handle.stop();
+      handleRef.current = handle;
+      const latest = streamRef.current;
+      if (latest && latest !== initial) handle.setStream(latest);
+    } catch (err) {
+      if (gen === generation.current) fail(toError(err));
+    }
+  }, [pairing, fail]);
+
+  const stop = useCallback(() => {
+    halt();
+    setStatus("idle");
+  }, [halt]);
+
+  return { status, error, start, stop };
+}
 
 export default function MobilePublisherPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
-  const resolvedParams = use(params);
-  const token = resolvedParams.token;
+  const { token } = use(params);
+  const claim = useDeviceLink(token);
+  const link: LinkState = claim?.state ?? "checking";
+  const pairing = claim?.state === "valid" ? claim.pairing : null;
+  const [facing, setFacing] = useState<Facing>("environment");
+  const preview = useCameraPreview(link === "valid", facing);
+  const broadcast = useBroadcast(pairing, preview.stream);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [status, setStatus] = useState<"standby" | "connecting" | "live">("standby");
-  const [connectionState, setConnectionState] = useState<WebRTCConnectionState | null>(null);
-
-  const broadcasterRef = useRef<{ stop: () => void } | null>(null);
-
-  // Initialize camera preview
-  const startCamera = async (mode: "environment" | "user") => {
-    try {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-
-      setErrorMsg(null);
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: mode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false, // Muted by default for educational safety
-      });
-
-      setStream(newStream);
-      setHasPermission(true);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-      }
-    } catch (err: unknown) {
-      console.error("Camera access error:", err);
-      setHasPermission(false);
-      const message = err instanceof Error ? err.message : "No se pudo acceder a la cámara";
-      setErrorMsg(`No se pudo acceder a la cámara: ${message}`);
-    }
-  };
-
-  useEffect(() => {
-    startCamera(facingMode);
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      if (broadcasterRef.current) {
-        broadcasterRef.current.stop();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facingMode]);
-
-  const toggleFacingMode = () => {
-    const nextMode = facingMode === "environment" ? "user" : "environment";
-    setFacingMode(nextMode);
-  };
-
-  const handleStartBroadcast = async () => {
-    if (!stream) return;
-
-    setStatus("connecting");
-    try {
-      const broadcaster = await startBroadcaster({
-        sessionId: token,
-        localStream: stream,
-        onStateChange: (state) => {
-          setConnectionState(state);
-          if (state === "connected") {
-            setStatus("live");
-            setIsBroadcasting(true);
-          } else if (state === "failed" || state === "closed") {
-            setStatus("standby");
-            setIsBroadcasting(false);
-          }
-        },
-        onError: (err) => {
-          setErrorMsg(err.message);
-          setStatus("standby");
-          setIsBroadcasting(false);
-        },
-      });
-
-      broadcasterRef.current = broadcaster;
-      setIsBroadcasting(true);
-      setStatus("live");
-    } catch (err) {
-      console.error("Broadcast start failed:", err);
-      setStatus("standby");
-      setIsBroadcasting(false);
-    }
-  };
-
-  const handleStopBroadcast = () => {
-    if (broadcasterRef.current) {
-      broadcasterRef.current.stop();
-      broadcasterRef.current = null;
-    }
-    setIsBroadcasting(false);
-    setStatus("standby");
-    setConnectionState(null);
-  };
+  const isOn = broadcast.status !== "idle" && broadcast.status !== "error";
+  const blocker = blockerFor(link, preview.error);
 
   return (
-    <div className="relative flex min-h-screen flex-col justify-between bg-black text-foreground p-4 select-none">
-      {/* Top Mobile Bar HUD */}
-      <div className="z-20 flex items-center justify-between rounded-xl bg-black/60 backdrop-blur-md p-3 border border-[var(--line)]">
+    <div className="flex min-h-screen flex-col gap-4 bg-black p-4 text-foreground select-none">
+      <header className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/30 text-accent border border-accent/40">
-            <Radio className="h-4 w-4" />
-          </div>
+          <Radio className="h-4 w-4 text-accent" />
           <div>
-            <p className="text-xs font-bold leading-tight">SE7EN TRANSMITTER</p>
-            <p className="text-[10px] font-mono text-muted">
-              Firebase WebRTC · Catriel Escuelas
+            <p className="text-[13px] font-semibold">Consola transmisora</p>
+            <p className="text-[11px] text-muted">
+              {pairing?.cameraName || "Corredor Escolar · Catriel"}
             </p>
           </div>
         </div>
+        <StatusPill status={broadcast.status} />
+      </header>
 
-        {/* Live Status Pill */}
-        <div className="flex items-center gap-2">
-          {status === "live" ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-mono font-bold text-foreground uppercase tracking-wider animate-pulse">
-              <span className="h-2 w-2 rounded-full bg-white" />
-              EMITIENDO EN VIVO
-            </span>
-          ) : status === "connecting" ? (
-            <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-mono text-amber-400">
-              SEÑALIZANDO...
-            </span>
-          ) : (
-            <span className="rounded-full bg-panel-3 px-2.5 py-0.5 text-[10px] font-mono text-muted">
-              EN ESPERA
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Main Viewport / Camera Preview */}
-      <div className="relative my-4 flex-1 overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-zinc-950 flex items-center justify-center">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-zinc-950">
         <video
-          ref={videoRef}
+          ref={preview.videoRef}
           autoPlay
           playsInline
           muted
-          className={`h-full w-full object-cover ${
- facingMode ==="user" ?"scale-x-[-1]" :""
- }`}
+          className={`h-full w-full object-cover ${facing === "user" ? "scale-x-[-1]" : ""}`}
         />
-
-        {/* Permission Request State */}
-        {hasPermission === false && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6 text-center">
-            <AlertCircle className="h-12 w-12 text-rose-500 mb-3" />
-            <h3 className="adm-title text-[13px] text-foreground">Permiso de Cámara Requerido</h3>
-            <p className="text-xs text-muted mt-1 max-w-xs">
-              Por favor habilite los permisos de cámara en su navegador para transmitir video al centro de monitoreo.
-            </p>
-            <button
-              onClick={() => startCamera(facingMode)}
-              className="mt-4 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background"
-            >
-              Reintentar
-            </button>
-          </div>
+        {blocker && (
+          <Blocker
+            {...blocker}
+            onRetry={blocker.retry ? preview.retry : undefined}
+          />
         )}
-
-        {/* Active Broadcast On-Screen Overlay */}
-        {isBroadcasting && (
-          <div className="absolute top-3 left-3 z-10 rounded-md bg-black/70 backdrop-blur-md px-2.5 py-1 text-[10px] font-mono text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>ENLACE ACTIVO · {connectionState ? connectionState.toUpperCase() : "OK"}</span>
-          </div>
+        {!blocker && (
+          <button
+            onClick={() =>
+              setFacing(facing === "environment" ? "user" : "environment")
+            }
+            aria-label="Cambiar entre cámara frontal y trasera"
+            className="absolute top-3 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line-strong)] bg-black/60"
+          >
+            <SwitchCamera className="h-5 w-5" />
+          </button>
         )}
+      </div>
 
-        {/* Camera switch button floating on preview */}
-        <button
-          onClick={toggleFacingMode}
-          className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-[var(--line-strong)] text-foreground active:scale-95 transition-transform"
-          title="Cambiar a cámara frontal o trasera"
+      {broadcast.error && (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-500/40 p-3 text-[13px] text-red-300"
         >
-          <SwitchCamera className="h-5 w-5" />
+          {broadcast.error}
+        </p>
+      )}
+
+      {isOn ? (
+        <button
+          onClick={broadcast.stop}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 py-4 text-[15px] font-bold text-white"
+        >
+          <Square className="h-5 w-5" /> Detener transmisión
         </button>
-      </div>
+      ) : (
+        <button
+          onClick={() => void broadcast.start()}
+          disabled={!preview.stream || !!blocker}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-4 text-[15px] font-bold text-background disabled:opacity-40"
+        >
+          <Radio className="h-5 w-5" /> Iniciar transmisión
+        </button>
+      )}
 
-      {/* Bottom Action Control Bar */}
-      <div className="z-20 flex flex-col gap-3">
-        {/* Main Big Broadcast Button */}
-        {!isBroadcasting ? (
-          <button
-            onClick={handleStartBroadcast}
-            disabled={!hasPermission}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-accent py-4 text-sm font-bold uppercase tracking-wider text-foreground active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            <Radio className="h-5 w-5 animate-pulse" />
-            INICIAR TRANSMISIÓN AL DASHBOARD
-          </button>
-        ) : (
-          <button
-            onClick={handleStopBroadcast}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-rose-600 py-4 text-sm font-bold uppercase tracking-wider text-foreground active:scale-[0.98] transition-all"
-          >
-            <Square className="h-5 w-5" />
-            DETENER TRANSMISIÓN
-          </button>
-        )}
-
-        {/* Security / Educational Privacy Note */}
-        <div className="flex items-center justify-center gap-2 text-center text-[11px] text-muted">
-          <Shield className="h-3.5 w-3.5 text-emerald-500" />
-          <span>Canal P2P WebRTC Encriptado · Firestore Signaling</span>
-        </div>
-      </div>
+      <p className="flex items-center justify-center gap-2 text-center text-[11px] text-muted">
+        <Shield className="h-3.5 w-3.5 text-emerald-400" />
+        El video va directo al centro de monitoreo, sin audio y sin grabarse.
+      </p>
     </div>
   );
 }

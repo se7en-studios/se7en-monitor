@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Shield, Loader2 } from "lucide-react";
+import { Radio, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
+import { btnPrimary, input, label } from "@/components/ui";
 
 const AUTH_ERRORS: Record<string, string> = {
   "auth/invalid-credential": "Email o contraseña incorrectos.",
@@ -17,6 +18,10 @@ function authMessage(error: unknown): string {
   return AUTH_ERRORS[code] ?? "No se pudo iniciar sesión.";
 }
 
+const RING =
+  "pointer-events-none absolute top-1/2 left-1/2 h-[min(150vw,980px)] w-[min(92vw,640px)] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border";
+
+/** La puerta: anillos cruzados detrás del formulario, como en el ingreso del panel de Se7en. */
 export function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
@@ -38,67 +43,77 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4">
-      {/* Anillos cruzados detrás del formulario, como en el ingreso del panel de Se7en. */}
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute top-1/2 left-1/2 h-[min(150vw,980px)] w-[min(92vw,640px)] -translate-x-1/2 -translate-y-1/2 -rotate-[32deg] rounded-[50%] border border-[var(--line-strong)]"
+        className={`${RING} -rotate-[32deg] border-[var(--line-strong)]`}
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 left-1/2 h-[min(150vw,980px)] w-[min(92vw,640px)] -translate-x-1/2 -translate-y-1/2 rotate-[24deg] rounded-[50%] border border-accent/45"
-      />
-      <form
-        onSubmit={onSubmit}
-        className="adm-in relative w-full max-w-sm space-y-5 rounded-2xl border border-[var(--line)] bg-panel p-7"
-      >
-        <div className="flex flex-col items-center gap-2 text-center">
-          <Shield className="h-8 w-8 text-accent" />
-          <h1 className="adm-display text-[28px] text-foreground">
+      <div aria-hidden className={`${RING} rotate-[24deg] border-accent/45`} />
+
+      <div className="relative w-full max-w-sm">
+        <div className="adm-in mb-8 text-center">
+          <span className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-accent text-background">
+            <Radio className="h-5 w-5" />
+          </span>
+          <h1 className="adm-display text-[clamp(32px,9vw,44px)] text-foreground">
             Se7en <span className="adm-serif">monitor</span>
           </h1>
-          <p className="adm-label">Acceso para operadores autorizados</p>
+          <p className="adm-label mt-3">Corredor Escolar Cuidado · Catriel</p>
         </div>
 
-        <label className="block space-y-1.5">
-          <span className="adm-label">Email</span>
-          <input
-            type="email"
-            required
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-[var(--line-strong)] bg-[var(--well)] px-3 py-2 text-[13px] text-foreground outline-none transition-colors focus:border-accent/70 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
-          />
-        </label>
-
-        <label className="block space-y-1.5">
-          <span className="adm-label">Contraseña</span>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-[var(--line-strong)] bg-[var(--well)] px-3 py-2 text-[13px] text-foreground outline-none transition-colors focus:border-accent/70 focus:shadow-[0_0_0_3px_var(--accent-soft)]"
-          />
-        </label>
-
-        {error && (
-          <p role="alert" className="text-xs text-red-400">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-accent px-3.5 py-2 text-sm font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-60"
+        <form
+          onSubmit={onSubmit}
+          className="adm-in space-y-4 rounded-2xl border border-[var(--line)] bg-panel p-6 sm:p-7"
+          aria-describedby={error ? "login-error" : undefined}
         >
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          Ingresar
-        </button>
-      </form>
-    </div>
+          <label className="block">
+            <span className={label}>Email</span>
+            <input
+              type="email"
+              required
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={input}
+            />
+          </label>
+
+          <label className="block">
+            <span className={label}>Contraseña</span>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={input}
+            />
+          </label>
+
+          {error && (
+            <p
+              id="login-error"
+              role="alert"
+              className="text-[13px] text-red-400"
+            >
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className={`${btnPrimary} w-full py-2.5`}
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy ? "Ingresando…" : "Ingresar"}
+          </button>
+        </form>
+
+        <p className="adm-in mt-5 text-center text-[12px] text-muted">
+          Acceso solo para operadores autorizados por el Municipio.
+        </p>
+      </div>
+    </main>
   );
 }

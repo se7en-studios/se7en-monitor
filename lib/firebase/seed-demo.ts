@@ -1,15 +1,20 @@
 import { collection, doc, getDocs, limit, query, writeBatch } from "firebase/firestore";
-import { db } from "./config";
+import { auth, db } from "./config";
 import * as demo from "@/data/demo-data";
 
-const COLLECTIONS: [string, { id: string }[]][] = [
-  ["schools", demo.MOCK_SCHOOLS],
-  ["cameras", demo.MOCK_CAMERAS],
-  ["incidents", demo.MOCK_INCIDENTS],
-  ["alerts", demo.MOCK_ALERTS],
-  ["maintenance_tickets", demo.MOCK_TICKETS],
-  ["activity_logs", demo.MOCK_ACTIVITY],
-];
+// La bitácora (activity_logs) no se siembra: solo admite eventos reales con identidad y
+// hora del servidor (ver firestore.rules). Incidentes y órdenes llevan quién los cargó.
+function demoCollections(uid: string): [string, { id: string }[]][] {
+  const withReporter = <T extends { id: string }>(docs: T[]) =>
+    docs.map((d) => ({ ...d, reported_by: uid }));
+  return [
+    ["schools", demo.MOCK_SCHOOLS],
+    ["cameras", demo.MOCK_CAMERAS],
+    ["incidents", withReporter(demo.MOCK_INCIDENTS)],
+    ["alerts", demo.MOCK_ALERTS],
+    ["maintenance_tickets", withReporter(demo.MOCK_TICKETS)],
+  ];
+}
 
 // Campos que se agregaron después: se completan en documentos demo viejos que no los tienen.
 const BACKFILL: Record<string, string[]> = {
@@ -23,7 +28,7 @@ const BACKFILL: Record<string, string[]> = {
  */
 export async function seedDemoData(): Promise<string[]> {
   const done: string[] = [];
-  for (const [name, docs] of COLLECTIONS) {
+  for (const [name, docs] of demoCollections(auth.currentUser?.uid ?? "")) {
     const snap = await getDocs(query(collection(db, name), limit(500)));
     const batch = writeBatch(db);
     let writes = 0;

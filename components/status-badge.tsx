@@ -1,15 +1,26 @@
 import { cn } from "@/lib/utils";
 
 interface StatusBadgeProps {
-  status: "online" | "offline" | "mantenimiento" | "alerta" | "operativo" | "atencion_requerida" | "en_obra";
+  status:
+    | "online"
+    | "offline"
+    | "mantenimiento"
+    | "alerta"
+    | "operativo"
+    | "atencion_requerida"
+    | "en_obra";
   size?: "sm" | "md";
   showDot?: boolean;
 }
 
-export function StatusBadge({ status, size = "md", showDot = true }: StatusBadgeProps) {
+export function StatusBadge({
+  status,
+  size = "md",
+  showDot = true,
+}: StatusBadgeProps) {
   const config = {
     online: {
-      label: "ONLINE",
+      label: "EN LÍNEA",
       bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
       dot: "bg-emerald-400 animate-live-pulse",
     },
@@ -29,7 +40,7 @@ export function StatusBadge({ status, size = "md", showDot = true }: StatusBadge
       dot: "bg-amber-400",
     },
     offline: {
-      label: "OFFLINE",
+      label: "SIN SEÑAL",
       bg: "bg-rose-500/10 text-rose-400 border-rose-500/20",
       dot: "bg-rose-400",
     },
@@ -41,12 +52,12 @@ export function StatusBadge({ status, size = "md", showDot = true }: StatusBadge
     en_obra: {
       label: "EN OBRA",
       bg: "bg-accent-soft text-accent border-accent/20",
-      dot: "bg-indigo-400",
+      dot: "bg-accent",
     },
   }[status] || {
     label: status.toUpperCase(),
-    bg: "bg-panel-3/10 text-muted border-[var(--line-strong)]/20",
-    dot: "bg-panel-3",
+    bg: "bg-white/[0.04] text-muted border-[var(--line-strong)]",
+    dot: "bg-muted",
   };
 
   return (
@@ -54,12 +65,13 @@ export function StatusBadge({ status, size = "md", showDot = true }: StatusBadge
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border font-mono font-medium tracking-wider uppercase",
         size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs",
-        config.bg
+        config.bg,
       )}
     >
-      {showDot && <span className={cn("h-1.5 w-1.5 rounded-full", config.dot)} />}
+      {showDot && (
+        <span className={cn("h-1.5 w-1.5 rounded-full", config.dot)} />
+      )}
       {config.label}
     </span>
   );
 }
-

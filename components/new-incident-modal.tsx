@@ -1,212 +1,288 @@
 "use client";
 
-import { useState } from "react";
-import { X, AlertTriangle, ShieldAlert, Clock, User } from "lucide-react";
-import { Incident, IncidentPriority, IncidentType } from "@/types/monitor";
-import { useCollection } from "@/lib/firebase/data";
-import type { School, Camera } from "@/types/monitor";
+import { useState, type FormEvent } from "react";
+import { AlertTriangle, Loader2, X } from "lucide-react";
+import type {
+  Camera,
+  Incident,
+  IncidentPriority,
+  IncidentType,
+  School,
+} from "@/types/monitor";
+import { newId, useCollection } from "@/lib/firebase/data";
+import { randomCode } from "@/lib/ids";
+import {
+  INCIDENT_PRIORITY_LABELS,
+  INCIDENT_TYPE_LABELS,
+} from "@/lib/incident-labels";
+import { describeError } from "@/components/toast";
+import { btnPrimary, btnSecondary, input, label } from "@/components/ui";
 
 interface NewIncidentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddIncident: (incident: Incident) => void;
+  /** Guarda el incidente. Si falla, el modal muestra el motivo y queda abierto. */
+  onAddIncident: (incident: Incident) => Promise<void>;
 }
 
-export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncidentModalProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+interface Draft {
+  title: string;
+  description: string;
+  schoolId: string;
+  cameraId: string;
+  type: IncidentType;
+  priority: IncidentPriority;
+  assignedTo: string;
+}
+
+const EMPTY: Draft = {
+  title: "",
+  description: "",
+  schoolId: "",
+  cameraId: "",
+  type: "perimetro_vulnerable",
+  priority: "media",
+  assignedTo: "",
+};
+
+/** Código legible: INC-<año>-<6 caracteres al azar (crypto)>. */
+const incidentCode = () =>
+  `INC-${new Date().getFullYear()}-${randomCode(6)}`;
+
+function buildIncident(
+  d: Draft,
+  schools: School[],
+  cameras: Camera[],
+): Incident {
+  const school = schools.find((s) => s.id === d.schoolId);
+  const camera = cameras.find((c) => c.id === d.cameraId);
+  // Firestore no acepta `undefined`: los campos de cámara solo van si hay cámara.
+  return {
+    id: newId("inc"),
+    code: incidentCode(),
+    school_id: d.schoolId,
+    school_name: school?.name ?? "",
+    ...(camera ? { camera_id: camera.id, camera_name: camera.name } : {}),
+    type: d.type,
+    title: d.title.trim(),
+    description: d.description.trim(),
+    priority: d.priority,
+    status: "nuevo",
+    assigned_to: d.assignedTo.trim(),
+    reported_at: new Date().toISOString(),
+    resolved_at: null,
+  };
+}
+
+function validate(d: Draft): string | null {
+  if (!d.schoolId) return "Elegí la escuela.";
+  if (d.title.trim().length < 5)
+    return "Escribí un título (al menos 5 caracteres).";
+  if (d.description.trim().length < 10)
+    return "Describí lo que pasó (al menos 10 caracteres).";
+  return null;
+}
+
+export function NewIncidentModal({
+  isOpen,
+  onClose,
+  onAddIncident,
+}: NewIncidentModalProps) {
   const { data: schools } = useCollection<School>("schools");
   const { data: cameras } = useCollection<Camera>("cameras");
-  const [pickedSchool, setSchoolId] = useState("");
-  const [pickedCamera, setCameraId] = useState("");
-  const schoolId = pickedSchool || schools[0]?.id || "";
-  const cameraId = pickedCamera || cameras[0]?.id || "";
-  const [type, setType] = useState<IncidentType>("perimetro_vulnerable");
-  const [priority, setPriority] = useState<IncidentPriority>("media");
-  const [assignedTo, setAssignedTo] = useState("Guardia Urbana Catriel");
-  const [notes, setNotes] = useState("");
+  const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title || !description || !schoolId) return;
-
-    const school = schools.find((s) => s.id === schoolId);
-    const camera = cameras.find((c) => c.id === cameraId);
-
-    const newIncident: Incident = {
-      id: "inc-" + Math.random().toString(36).substring(2, 7),
-      code: `INC-2026-${Math.floor(100 + Math.random() * 900)}`,
-      school_id: schoolId,
-      school_name: school?.name || "Escuela Catriel",
-      camera_id: cameraId,
-      camera_name: camera?.name || "Cámara perimetral",
-      type,
-      title,
-      description,
-      priority,
-      status: "nuevo",
-      assigned_to: assignedTo,
-      reported_at: new Date().toISOString(),
-      notes,
-    };
-
-    onAddIncident(newIncident);
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const schoolCameras = cameras.filter((c) => c.school_id === draft.schoolId);
+  const close = () => {
+    setDraft(EMPTY);
+    setError(null);
     onClose();
   };
 
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const problem = validate(draft);
+    setError(problem);
+    if (problem || busy) return;
+    setBusy(true);
+    try {
+      await onAddIncident(buildIncident(draft, schools, cameras));
+      close();
+    } catch (err) {
+      console.error("[incidentes] alta", err);
+      setError(describeError(err, "No se pudo registrar el incidente."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="relative max-h-[94vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl border border-[var(--line-strong)] bg-[var(--panel)] p-6"
+      >
         <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground"
+          type="button"
+          onClick={close}
+          aria-label="Cerrar"
+          className="absolute top-4 right-4 text-muted hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
-
-        <div className="flex items-center gap-3 border-b border-[var(--line)] pb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
-            <AlertTriangle className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="adm-title text-[13px] text-foreground">Reportar Incidente Escolar</h3>
-            <p className="text-xs text-muted">
-              Apertura de caso en el Corredor Escolar Cuidado de Catriel
-            </p>
-          </div>
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400" />
+          <h2 className="adm-title text-[15px] text-foreground">
+            Reportar incidente
+          </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Prioridad
-              </label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as IncidentPriority)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
-                <option value="critica">Crítica (Intervención Inmediata)</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Tipo de Suceso
-              </label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as IncidentType)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                <option value="perimetro_vulnerable">Perímetro Vulnerable</option>
-                <option value="persona_sospechosa">Persona Sospechosa en Vereda</option>
-                <option value="aglomeracion_no_habitual">Aglomeración no Habitual</option>
-                <option value="accidente_transito_escolar">Tránsito / Cruce Peatonal</option>
-                <option value="obstruccion_camara">Obstrucción Visual de Cámara</option>
-                <option value="corte_suministro">Corte de Energía Eléctrica</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Título del Incidente
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="ej: Vehículo detenido indebidamente sobre senda escolar"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Escuela Afectada
-              </label>
-              <select
-                value={schoolId}
-                onChange={(e) => setSchoolId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Cámara Asociada
-              </label>
-              <select
-                value={cameraId}
-                onChange={(e) => setCameraId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                {cameras.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.identifier} - {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Descripción y Circunstancias
-            </label>
-            <textarea
-              required
-              rows={3}
-              placeholder="Describa lo observado en la pantalla de monitoreo..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Asignar Guardia / Cuadrilla de Intervención
-            </label>
-            <input
-              type="text"
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-3 border-t border-[var(--line)]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-[var(--line)] px-4 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05]"
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field id="ni-priority" text="Prioridad">
+            <select
+              id="ni-priority"
+              className={input}
+              value={draft.priority}
+              onChange={(e) =>
+                set({ priority: e.target.value as IncidentPriority })
+              }
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-foreground hover:bg-amber-500 shadow-amber-600/20"
+              {(
+                Object.keys(INCIDENT_PRIORITY_LABELS) as IncidentPriority[]
+              ).map((p) => (
+                <option key={p} value={p}>
+                  {INCIDENT_PRIORITY_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field id="ni-type" text="Tipo">
+            <select
+              id="ni-type"
+              className={input}
+              value={draft.type}
+              onChange={(e) => set({ type: e.target.value as IncidentType })}
             >
-              Registrar y Notificar
-            </button>
-          </div>
-        </form>
-      </div>
+              {(Object.keys(INCIDENT_TYPE_LABELS) as IncidentType[]).map(
+                (t) => (
+                  <option key={t} value={t}>
+                    {INCIDENT_TYPE_LABELS[t]}
+                  </option>
+                ),
+              )}
+            </select>
+          </Field>
+          <Field id="ni-school" text="Escuela">
+            <select
+              id="ni-school"
+              className={input}
+              value={draft.schoolId}
+              onChange={(e) => set({ schoolId: e.target.value, cameraId: "" })}
+            >
+              <option value="">Elegí una escuela</option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field id="ni-camera" text="Cámara (opcional)">
+            <select
+              id="ni-camera"
+              className={input}
+              value={draft.cameraId}
+              disabled={!draft.schoolId}
+              onChange={(e) => set({ cameraId: e.target.value })}
+            >
+              <option value="">Sin cámara asociada</option>
+              {schoolCameras.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.identifier} · {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <Field id="ni-title" text="Título">
+          <input
+            id="ni-title"
+            maxLength={200}
+            className={input}
+            placeholder="ej: Vehículo detenido sobre la senda escolar"
+            value={draft.title}
+            onChange={(e) => set({ title: e.target.value })}
+          />
+        </Field>
+        <Field id="ni-desc" text="Qué pasó">
+          <textarea
+            id="ni-desc"
+            rows={3}
+            maxLength={2000}
+            className={input}
+            placeholder="Lo que se vio, dónde y a qué hora"
+            value={draft.description}
+            onChange={(e) => set({ description: e.target.value })}
+          />
+        </Field>
+        <Field id="ni-assigned" text="Asignado a (opcional)">
+          <input
+            id="ni-assigned"
+            maxLength={200}
+            className={input}
+            placeholder="ej: Guardia Urbana"
+            value={draft.assignedTo}
+            onChange={(e) => set({ assignedTo: e.target.value })}
+          />
+        </Field>
+
+        {error && (
+          <p role="alert" className="text-[13px] text-red-400">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
+          <button
+            type="button"
+            className={btnSecondary}
+            onClick={close}
+            disabled={busy}
+          >
+            Cancelar
+          </button>
+          <button type="submit" className={btnPrimary} disabled={busy}>
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            Registrar incidente
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
+function Field({
+  id,
+  text,
+  children,
+}: {
+  id: string;
+  text: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className={label}>
+        {text}
+      </label>
+      {children}
+    </div>
+  );
+}

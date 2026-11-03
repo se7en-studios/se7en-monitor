@@ -1,6 +1,8 @@
 "use client";
 
-import { Cctv, ShieldCheck, Activity, TrendingUp } from "lucide-react";
+import { ShieldCheck, Activity, TrendingUp } from "lucide-react";
+import { Card } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import type { DashboardMetrics, Incident } from "@/types/monitor";
 
 interface DashboardChartsProps {
@@ -40,6 +42,23 @@ function lastDays(incidents: Incident[]) {
 
 const pct = (part: number, total: number) => (total ? (part / total) * 100 : 0);
 
+const TILES = [
+  { key: "online", label: "En línea", note: "Transmisión OK", tone: "emerald" },
+  {
+    key: "warning",
+    label: "Alerta",
+    note: "Alerta o mantenimiento",
+    tone: "amber",
+  },
+  { key: "offline", label: "Sin señal", note: "Desconectada", tone: "rose" },
+] as const;
+
+const TONE = {
+  emerald: "border-emerald-500/20 bg-emerald-500/5 text-emerald-300",
+  amber: "border-amber-500/20 bg-amber-500/5 text-amber-300",
+  rose: "border-rose-500/20 bg-rose-500/5 text-rose-300",
+};
+
 export function DashboardCharts({ metrics, incidents }: DashboardChartsProps) {
   const days = lastDays(incidents);
   const weekTotal = days.reduce((sum, d) => sum + d.incidents, 0);
@@ -52,142 +71,110 @@ export function DashboardCharts({ metrics, incidents }: DashboardChartsProps) {
     cameras_warning: warning,
     cameras_offline: offline,
   } = metrics;
+  const counts = { online, warning, offline };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      {/* Chart 1: Estado de Cámaras y Cobertura */}
-      <div className="rounded-xl border border-[var(--line)] bg-panel p-5">
-        <div className="flex items-center justify-between border-b border-[var(--line)] pb-4">
-          <div>
-            <h3 className="adm-title text-[13px] text-foreground">
-              Cámaras Operativas vs. Desconectadas
-            </h3>
-            <p className="text-xs text-muted">
-              Red de videovigilancia en {metrics.total_schools} establecimientos
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-mono">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Card
+        title="Estado de las cámaras"
+        action={
+          <span className="flex items-center gap-1.5 font-mono text-[12px] text-emerald-400">
             <Activity className="h-3.5 w-3.5" />
-            <span>{Math.round(pct(online, total))}% Online</span>
-          </div>
-        </div>
-
-        <div className="mt-5 space-y-4">
-          <div>
-            <div className="flex justify-between text-xs mb-1.5 font-mono">
-              <span className="text-foreground/85">
-                {online} Operativas ({Math.round(pct(online, total))}%)
-              </span>
-              <span className="text-rose-400">{offline} Offline</span>
-              <span className="text-amber-400">{warning} Alerta</span>
-            </div>
-            <div className="h-3.5 w-full rounded-full bg-panel-3 overflow-hidden flex p-0.5 border border-[var(--line)]">
-              <div
-                style={{ width: `${pct(online, total)}%` }}
-                className="h-full bg-emerald-500 rounded-l-full"
-                title={`${online} operativas`}
-              />
-              <div
-                style={{ width: `${pct(warning, total)}%` }}
-                className="h-full bg-amber-400"
-                title={`${warning} en alerta o mantenimiento`}
-              />
-              <div
-                style={{ width: `${pct(offline, total)}%` }}
-                className="h-full bg-rose-500 rounded-r-full"
-                title={`${offline} desconectadas`}
-              />
-            </div>
+            {Math.round(pct(online, total))}% en línea
+          </span>
+        }
+      >
+        <div className="space-y-4 p-4">
+          <p className="text-[12px] text-muted">
+            Red de videovigilancia en {metrics.total_schools} establecimientos
+          </p>
+          <div
+            className="flex h-3 w-full overflow-hidden rounded-full border border-[var(--line)] bg-[var(--well)]"
+            role="img"
+            aria-label={`${online} en línea, ${warning} en alerta, ${offline} sin señal`}
+          >
+            <div
+              style={{ width: `${pct(online, total)}%` }}
+              className="h-full bg-emerald-500"
+            />
+            <div
+              style={{ width: `${pct(warning, total)}%` }}
+              className="h-full bg-amber-400"
+            />
+            <div
+              style={{ width: `${pct(offline, total)}%` }}
+              className="h-full bg-rose-500"
+            />
           </div>
 
-          <div className="grid grid-cols-3 gap-3 pt-2">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
-              <p className="text-[10px] font-mono uppercase text-emerald-400">
-                En Línea
-              </p>
-              <p className="mt-1 adm-num text-[32px] leading-none text-emerald-300">
-                {online}
-              </p>
-              <p className="text-[10px] text-muted">Transmisión OK</p>
-            </div>
-
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-center">
-              <p className="text-[10px] font-mono uppercase text-amber-400">
-                Alerta
-              </p>
-              <p className="mt-1 adm-num text-[32px] leading-none text-amber-300">
-                {warning}
-              </p>
-              <p className="text-[10px] text-muted">
-                Alerta o mantenimiento
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-center">
-              <p className="text-[10px] font-mono uppercase text-rose-400">
-                Desconectada
-              </p>
-              <p className="mt-1 adm-num text-[32px] leading-none text-rose-300">
-                {offline}
-              </p>
-              <p className="text-[10px] text-muted">Sin señal</p>
-            </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {TILES.map((t) => (
+              <div
+                key={t.key}
+                className={cn(
+                  "rounded-lg border p-3 text-center",
+                  TONE[t.tone],
+                )}
+              >
+                <p className="font-mono text-[10.5px] tracking-[0.1em] uppercase">
+                  {t.label}
+                </p>
+                <p className="adm-num mt-1 text-[32px] leading-none">
+                  {counts[t.key]}
+                </p>
+                <p className="mt-0.5 hidden text-[11px] text-muted sm:block">
+                  {t.note}
+                </p>
+              </div>
+            ))}
           </div>
 
-          <div className="rounded-lg border border-accent/20 bg-accent-soft p-3 flex items-center justify-between text-xs">
-            <span className="text-foreground/85 flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/20 bg-accent-soft p-3 text-[12px]">
+            <span className="flex items-center gap-2 text-foreground/85">
               <ShieldCheck className="h-4 w-4 text-accent" />
-              Perímetro seguro 200m cubierto
+              Perímetro de 200 m cubierto
             </span>
-            <span className="font-mono font-bold text-accent">
-              {metrics.corridor_meters_covered.toLocaleString("es-AR")} mts de
+            <span className="font-mono font-medium text-accent">
+              {metrics.corridor_meters_covered.toLocaleString("es-AR")} m de
               radio
             </span>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Chart 2: Incidentes por día */}
-      <div className="rounded-xl border border-[var(--line)] bg-panel p-5">
-        <div className="flex items-center justify-between border-b border-[var(--line)] pb-4">
-          <div>
-            <h3 className="adm-title text-[13px] text-foreground">
-              Incidentes Registrados (Últimos 7 días)
-            </h3>
-            <p className="text-xs text-muted">
-              Corredores escolares y accesos a instituciones
-            </p>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-muted font-mono">
+      <Card
+        title="Incidentes, últimos 7 días"
+        action={
+          <span className="flex items-center gap-1 font-mono text-[12px] text-muted">
             <TrendingUp className="h-3.5 w-3.5 text-accent" />
-            <span>Total: {weekTotal}</span>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <div className="flex items-end justify-between h-40 pt-4 px-2">
+            Total: {weekTotal}
+          </span>
+        }
+      >
+        <div className="p-4">
+          <div className="flex h-40 items-end justify-between gap-1 pt-4">
             {days.map((d, index) => (
               <div
                 key={index}
-                className="flex flex-col items-center gap-2 flex-1 group"
+                className="group flex flex-1 flex-col items-center gap-2"
               >
-                <span className="text-[10px] font-mono text-muted opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="font-mono text-[11px] text-muted">
                   {d.incidents}
                 </span>
-                <div className="w-full max-w-[28px] h-32 bg-panel-3/60 rounded-md flex items-end p-1">
+                <div className="flex h-28 w-full max-w-[28px] items-end rounded-md bg-[var(--well)] p-1">
                   <div
                     style={{ height: d.height }}
-                    className={`w-full rounded transition-all duration-300 group-hover:brightness-125 ${
- d.active
- ?"bg-accent"
- :"bg-accent/50"
- }`}
+                    className={cn(
+                      "w-full rounded transition-all duration-300",
+                      d.active ? "bg-accent" : "bg-accent/50",
+                    )}
                   />
                 </div>
                 <span
-                  className={`text-[11px] font-mono ${
- d.active ?"text-accent font-bold" :"text-muted"
- }`}
+                  className={cn(
+                    "font-mono text-[11px]",
+                    d.active ? "font-bold text-accent" : "text-muted",
+                  )}
                 >
                   {d.day}
                 </span>
@@ -195,15 +182,15 @@ export function DashboardCharts({ metrics, incidents }: DashboardChartsProps) {
             ))}
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-[var(--line)] pt-3 text-xs text-muted">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-[12px] text-muted">
             <span>{incidents.length} incidentes en total</span>
-            <span className="text-emerald-400 font-mono font-medium">
+            <span className="font-mono font-medium text-emerald-400">
               {Math.round(pct(resolved, incidents.length))}% resueltos o
               cerrados
             </span>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
