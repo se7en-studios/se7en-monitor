@@ -1,272 +1,389 @@
 "use client";
 
-import { useState } from "react";
-import { X, Cctv, Shield, MapPin, Radio, Plus } from "lucide-react";
-import { Camera, CameraDeviceType, CameraLocationType } from "@/types/monitor";
-import { useCollection } from "@/lib/firebase/data";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Cctv, Loader2, X } from "lucide-react";
+import type {
+  Camera,
+  CameraDeviceType,
+  CameraLocationType,
+  School,
+} from "@/types/monitor";
+import { newId, useCollection } from "@/lib/firebase/data";
 import { distanceMeters } from "@/lib/geo";
-import type { School } from "@/types/monitor";
+import { DEVICE_LABELS, LOCATION_LABELS } from "@/lib/camera-labels";
+import { describeError } from "@/components/toast";
+import { btnPrimary, btnSecondary, input, label } from "@/components/ui";
 
 interface AddCameraModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddCamera: (camera: Camera) => void;
+  /** Guarda la cámara. Si falla, el modal muestra el motivo y queda abierto. */
+  onAddCamera: (camera: Camera) => Promise<void>;
 }
 
-export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalProps) {
-  const [name, setName] = useState("");
-  const [identifier, setIdentifier] = useState("");
-  const { data: schools } = useCollection<School>("schools");
-  const [pickedSchool, setSchoolId] = useState("");
-  const schoolId = pickedSchool || schools[0]?.id || "";
-  const [locationType, setLocationType] = useState<CameraLocationType>("acceso_principal");
-  const [locationDetail, setLocationDetail] = useState("");
-  const [deviceType, setDeviceType] = useState<CameraDeviceType>("ip_dome");
-  const [ipAddress, setIpAddress] = useState("192.168.10.55");
-  const [resolution, setResolution] = useState("1080p FHD");
-  const [latText, setLatText] = useState("");
-  const [lngText, setLngText] = useState("");
+const RESOLUTIONS = ["720p HD", "1080p FHD", "2K QHD", "4K UHD"];
+const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+const parseCoord = (s: string) => Number.parseFloat(s.replace(",", "."));
 
+interface Draft {
+  identifier: string;
+  name: string;
+  deviceType: CameraDeviceType;
+  locationType: CameraLocationType;
+  detail: string;
+  ip: string;
+  resolution: string;
+  lat: string;
+  lng: string;
+}
+
+const EMPTY: Draft = {
+  identifier: "",
+  name: "",
+  deviceType: "ip_dome",
+  locationType: "acceso_principal",
+  detail: "",
+  ip: "",
+  resolution: "1080p FHD",
+  lat: "",
+  lng: "",
+};
+
+function validate(
+  d: Draft,
+  schoolId: string,
+  isOutside: boolean,
+  hasCoords: boolean,
+): string | null {
+  if (!d.identifier.trim())
+    return "Escribí el identificador (ej: CAM-204-NORTE).";
+  if (d.name.trim().length < 3) return "Escribí un nombre descriptivo.";
+  if (!schoolId) return "Elegí la escuela.";
+  if (!hasCoords) return "Cargá la ubicación (latitud y longitud).";
+  if (isOutside)
+    return "La cámara está fuera del corredor escolar de la escuela.";
+  if (d.ip.trim() && !IPV4.test(d.ip.trim()))
+    return "La dirección IP no es válida.";
+  return null;
+}
+
+function buildCamera(
+  d: Draft,
+  school: School,
+  lat: number,
+  lng: number,
+): Camera {
+  const isMobile = d.deviceType === "mobile_webrtc";
+  const ip = d.ip.trim();
+  return {
+    id: newId("cam"),
+    school_id: school.id,
+    school_name: school.name,
+    identifier: d.identifier.trim().toUpperCase(),
+    name: d.name.trim(),
+    location_type: d.locationType,
+    location_detail: d.detail.trim(),
+    device_type: d.deviceType,
+    // Recién dada de alta no transmite todavía.
+    status: "offline",
+    last_heartbeat: null,
+    lat,
+    lng,
+    // Firestore no acepta `undefined`: la IP solo va si se cargó.
+    ...(!isMobile && ip ? { ip_address: ip } : {}),
+    stream_type: isMobile ? "webrtc" : "rtsp",
+    resolution: isMobile ? "720p HD" : d.resolution,
+    fps: 30,
+    is_live: false,
+    installed_at: new Date().toISOString().slice(0, 10),
+  };
+}
+
+export function AddCameraModal({
+  isOpen,
+  onClose,
+  onAddCamera,
+}: AddCameraModalProps) {
+  const { data: schools } = useCollection<School>("schools");
+  const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [pickedSchool, setPickedSchool] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const schoolId = pickedSchool || schools[0]?.id || "";
   const school = schools.find((s) => s.id === schoolId);
-  const lat = Number.parseFloat(latText.replace(",", "."));
-  const lng = Number.parseFloat(lngText.replace(",", "."));
-  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
-  const distance = school && hasCoords ? distanceMeters(school, { lat, lng }) : null;
+  const lat = parseCoord(draft.lat);
+  const lng = parseCoord(draft.lng);
+  const hasCoords =
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180;
+  const distance =
+    school && hasCoords ? distanceMeters(school, { lat, lng }) : null;
   const radius = school?.perimeter_radius_meters ?? 200;
   const isOutside = distance !== null && distance > radius;
+  const isMobile = draft.deviceType === "mobile_webrtc";
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !identifier || !schoolId || !hasCoords || isOutside) return;
-
-    const newCamera: Camera = {
-      id: "cam-" + Math.random().toString(36).substring(2, 7),
-      school_id: schoolId,
-      school_name: school?.name || "Escuela Catriel",
-      identifier,
-      name,
-      location_type: locationType,
-      location_detail: locationDetail || "Punto de monitoreo perimetral 200m",
-      device_type: deviceType,
-      // Recién dada de alta no transmite todavía: pasa a "online" cuando reporta señal.
-      status: "offline",
-      last_heartbeat: null,
-      lat,
-      lng,
-      ip_address: ipAddress,
-      stream_type: "webrtc",
-      resolution,
-      fps: 30,
-      is_live: false,
-      installed_at: new Date().toISOString().split("T")[0],
-    };
-
-    onAddCamera(newCamera);
+  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const close = () => {
+    setDraft(EMPTY);
+    setError(null);
     onClose();
   };
 
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const problem = validate(draft, schoolId, isOutside, hasCoords);
+    setError(problem);
+    if (problem || !school || busy) return;
+    setBusy(true);
+    try {
+      await onAddCamera(buildCamera(draft, school, lat, lng));
+      close();
+    } catch (err) {
+      console.error("[cámaras] alta", err);
+      setError(describeError(err, "No se pudo dar de alta la cámara."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="relative max-h-[94vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl border border-[var(--line-strong)] bg-[var(--panel)] p-6"
+      >
         <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground"
+          type="button"
+          onClick={close}
+          aria-label="Cerrar"
+          className="absolute top-4 right-4 text-muted hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
-
-        <div className="flex items-center gap-3 border-b border-[var(--line)] pb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/20 border border-accent/30 text-accent">
-            <Cctv className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="adm-title text-[13px] text-foreground">Instalar Nuevo Punto de Monitoreo</h3>
-            <p className="text-xs text-muted">
-              Alta técnica de cámara fija perimetral o domo urbano en Catriel
-            </p>
-          </div>
+        <div className="flex items-center gap-3">
+          <Cctv className="h-5 w-5 text-accent" />
+          <h2 className="adm-title text-[15px] text-foreground">
+            Agregar cámara
+          </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Identificador Único
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="ej: CAM-204-NORTE"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Tipo de Dispositivo
-              </label>
-              <select
-                value={deviceType}
-                onChange={(e) => setDeviceType(e.target.value as CameraDeviceType)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                <option value="mobile_webrtc">Celular (WebRTC)</option>
-                <option value="ip_dome">IP Domo Antivandálico</option>
-                <option value="ptz_exterior">Domo PTZ 360°</option>
-                <option value="ip_bullet">Bullet Perimetral Exterior</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Nombre Descriptivo de la Cámara
-            </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field id="ac-id" text="Identificador">
             <input
-              type="text"
-              required
-              placeholder="ej: Portón Ingreso Turno Mañana"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              id="ac-id"
+              className={input}
+              placeholder="ej: CAM-204-NORTE"
+              value={draft.identifier}
+              onChange={(e) => set({ identifier: e.target.value })}
             />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Establecimiento Educativo Asignado
-            </label>
+          </Field>
+          <Field id="ac-type" text="Tipo de dispositivo">
             <select
-              value={schoolId}
-              onChange={(e) => setSchoolId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
+              id="ac-type"
+              className={input}
+              value={draft.deviceType}
+              onChange={(e) =>
+                set({ deviceType: e.target.value as CameraDeviceType })
+              }
             >
-              {schools.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code}) - {s.neighborhood}
+              {(Object.keys(DEVICE_LABELS) as CameraDeviceType[]).map((t) => (
+                <option key={t} value={t}>
+                  {DEVICE_LABELS[t]}
+                  {t === "mobile_webrtc" ? " (transmite video)" : ""}
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
+        </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Ubicación (latitud, longitud)
-              </label>
-              {school && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLatText(String(school.lat));
-                    setLngText(String(school.lng));
-                  }}
-                  className="text-[11px] text-accent hover:underline"
-                >
-                  Partir de la escuela
-                </button>
-              )}
-            </div>
-            <div className="mt-1 grid grid-cols-2 gap-3">
-              <input
-                type="text"
-                inputMode="decimal"
-                required
-                placeholder="-37.8785"
-                value={latText}
-                onChange={(e) => setLatText(e.target.value)}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-              />
-              <input
-                type="text"
-                inputMode="decimal"
-                required
-                placeholder="-67.7955"
-                value={lngText}
-                onChange={(e) => setLngText(e.target.value)}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-              />
-            </div>
-            {distance !== null && (
-              <p
-                role={isOutside ? "alert" : undefined}
-                className={`mt-1.5 text-[11px] ${isOutside ? "text-red-400" : "text-emerald-300"}`}
+        <Field id="ac-name" text="Nombre">
+          <input
+            id="ac-name"
+            className={input}
+            placeholder="ej: Portón de ingreso turno mañana"
+            value={draft.name}
+            onChange={(e) => set({ name: e.target.value })}
+          />
+        </Field>
+
+        <Field id="ac-school" text="Escuela">
+          <select
+            id="ac-school"
+            className={input}
+            value={schoolId}
+            onChange={(e) => setPickedSchool(e.target.value)}
+          >
+            {schools.length === 0 && (
+              <option value="">No hay escuelas registradas</option>
+            )}
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.code})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <span className={label}>Ubicación (latitud, longitud)</span>
+            {school && (
+              <button
+                type="button"
+                onClick={() =>
+                  set({ lat: String(school.lat), lng: String(school.lng) })
+                }
+                className="text-[12px] text-accent hover:underline"
               >
-                {isOutside
-                  ? `Fuera del corredor: está a ${Math.round(distance)} m de la escuela y el límite es ${radius} m.`
-                  : `Dentro del corredor: a ${Math.round(distance)} m de la escuela (límite ${radius} m).`}
-              </p>
+                Partir de la escuela
+              </button>
             )}
           </div>
-
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Zona de Monitoreo
-              </label>
-              <select
-                value={locationType}
-                onChange={(e) => setLocationType(e.target.value as CameraLocationType)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                <option value="acceso_principal">Acceso Principal</option>
-                <option value="corredor_escolar">Corredor Seguro (200m)</option>
-                <option value="perimetro_exterior">Perímetro Exterior</option>
-                <option value="patio_general">Patio General</option>
-                <option value="porton_secundario">Portón Secundario</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-                Resolución
-              </label>
-              <select
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
-              >
-                <option value="1080p FHD">1080p FHD (30 FPS)</option>
-                <option value="2K QHD">2K QHD (30 FPS)</option>
-                <option value="4K UHD">4K UHD (60 FPS)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-              Detalle de Montaje o Columna
-            </label>
             <input
-              type="text"
-              placeholder="ej: Poste Alumbrado Público N° 42 esq. Rawson"
-              value={locationDetail}
-              onChange={(e) => setLocationDetail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              aria-label="Latitud"
+              inputMode="decimal"
+              className={input}
+              placeholder="-37.8785"
+              value={draft.lat}
+              onChange={(e) => set({ lat: e.target.value })}
+            />
+            <input
+              aria-label="Longitud"
+              inputMode="decimal"
+              className={input}
+              placeholder="-67.7955"
+              value={draft.lng}
+              onChange={(e) => set({ lng: e.target.value })}
             />
           </div>
+          {distance !== null && (
+            <p
+              role={isOutside ? "alert" : undefined}
+              className={`mt-1.5 text-[12px] ${isOutside ? "text-red-400" : "text-emerald-300"}`}
+            >
+              {isOutside
+                ? `Fuera del corredor: está a ${Math.round(distance)} m de la escuela y el límite es ${radius} m.`
+                : `Dentro del corredor: a ${Math.round(distance)} m de la escuela (límite ${radius} m).`}
+            </p>
+          )}
+        </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-[var(--line)]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-[var(--line)] px-4 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05]"
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field id="ac-zone" text="Zona">
+            <select
+              id="ac-zone"
+              className={input}
+              value={draft.locationType}
+              onChange={(e) =>
+                set({ locationType: e.target.value as CameraLocationType })
+              }
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={!hasCoords || isOutside}
-              className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            >
-              Dar de alta la cámara
-            </button>
-          </div>
-        </form>
-      </div>
+              {(Object.keys(LOCATION_LABELS) as CameraLocationType[]).map(
+                (l) => (
+                  <option key={l} value={l}>
+                    {LOCATION_LABELS[l]}
+                  </option>
+                ),
+              )}
+            </select>
+          </Field>
+          {!isMobile && (
+            <Field id="ac-res" text="Resolución">
+              <select
+                id="ac-res"
+                className={input}
+                value={draft.resolution}
+                onChange={(e) => set({ resolution: e.target.value })}
+              >
+                {RESOLUTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </div>
+
+        {!isMobile && (
+          <Field id="ac-ip" text="Dirección IP (opcional)">
+            <input
+              id="ac-ip"
+              className={input}
+              inputMode="decimal"
+              placeholder="ej: 192.168.10.55"
+              value={draft.ip}
+              onChange={(e) => set({ ip: e.target.value })}
+            />
+          </Field>
+        )}
+        <Field id="ac-detail" text="Detalle de montaje (opcional)">
+          <input
+            id="ac-detail"
+            className={input}
+            placeholder="ej: Poste de alumbrado N° 42 esq. Rawson"
+            value={draft.detail}
+            onChange={(e) => set({ detail: e.target.value })}
+          />
+        </Field>
+
+        {isMobile && (
+          <p className="text-[12px] text-muted">
+            Después del alta, generá el enlace con «Vincular celular» y abrilo
+            en el teléfono.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-[13px] text-red-400">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
+          <button
+            type="button"
+            className={btnSecondary}
+            onClick={close}
+            disabled={busy}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className={btnPrimary}
+            disabled={busy || isOutside}
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            Dar de alta la cámara
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
+function Field({
+  id,
+  text,
+  children,
+}: {
+  id: string;
+  text: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className={label}>
+        {text}
+      </label>
+      {children}
+    </div>
+  );
+}

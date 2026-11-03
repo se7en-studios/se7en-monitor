@@ -1,4 +1,13 @@
-import { Timestamp, deleteDoc, doc, writeBatch } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  Timestamp,
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  onSnapshot,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "./config";
 import type { Camera } from "@/types/monitor";
 
@@ -55,3 +64,46 @@ export async function createPairing(
 /** Anula un enlace de vinculación (por ejemplo, al dar de baja la cámara). */
 export const revokePairing = (token: string) =>
   deleteDoc(doc(db, "pairings", token));
+
+/** Revoca el enlace de una cámara y limpia su `publish_token`, todo junto. */
+export async function revokeCameraPairing(camera: Camera): Promise<void> {
+  const batch = writeBatch(db);
+  if (camera.publish_token)
+    batch.delete(doc(db, "pairings", camera.publish_token));
+  batch.update(doc(db, "cameras", camera.id), { publish_token: deleteField() });
+  await batch.commit();
+}
+
+/** Da de baja una cámara y, si tenía, anula su enlace de vinculación. */
+export async function removeCamera(camera: Camera): Promise<void> {
+  const batch = writeBatch(db);
+  if (camera.publish_token)
+    batch.delete(doc(db, "pairings", camera.publish_token));
+  batch.delete(doc(db, "cameras", camera.id));
+  await batch.commit();
+}
+
+/**
+ * Vencimiento de cada enlace vigente, por token. Solo la administración puede leer
+ * `pairings` (ver firestore.rules): para otros roles queda vacío.
+ */
+export function usePairingExpirations(enabled: boolean): Map<string, Date> {
+  const [map, setMap] = useState<Map<string, Date>>(new Map());
+  useEffect(() => {
+    if (!enabled) return;
+    return onSnapshot(
+      collection(db, "pairings"),
+      (snap) =>
+        setMap(
+          new Map(
+            snap.docs.map((d) => [
+              d.id,
+              (d.data().expires_at as Timestamp).toDate(),
+            ]),
+          ),
+        ),
+      (err) => console.error("[pairings]", err),
+    );
+  }, [enabled]);
+  return map;
+}
