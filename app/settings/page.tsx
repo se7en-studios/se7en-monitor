@@ -1,4 +1,5 @@
 import { Settings, Shield, Lock, EyeOff, Bell, Database } from "lucide-react";
+import { SeedDemoCard } from "@/components/seed-demo-card";
 
 export default function SettingsPage() {
   return (
@@ -74,6 +75,8 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        <SeedDemoCard />
       </div>
     </div>
   );

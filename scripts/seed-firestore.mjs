@@ -14,7 +14,7 @@
 import { initializeApp, applicationDefault } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-import * as seed from "./seed-data.ts";
+import * as seed from "../data/demo-data.ts";
 
 const { SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD, SUPERADMIN_NAME, SEED_FORCE } = process.env;
 

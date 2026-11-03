@@ -61,7 +61,7 @@ MONITOREO ESCUELAS/
 │   ├── status-badge.tsx          # Insignias de estado (Online, Alerta, Offline)
 │   └── connect-mobile-modal.tsx  # Modal con código QR para vincular celular
 ├── data/
-│   └── seed-data.ts              # Datos demo de Catriel (solo para `npm run seed:firebase`)
+│   └── demo-data.ts              # Datos demo de Catriel (solo para `npm run seed:firebase`)
 ├── lib/
 │   ├── utils.ts                  # Helpers de clases y formateo de fechas
 │   ├── roles.ts                  # Roles y permisos (espejo de firestore.rules)
