@@ -21,7 +21,12 @@ import { ActivityFeed } from "@/components/activity-feed";
 import { StatusBadge } from "@/components/status-badge";
 import { useCollection, byId, byNewest } from "@/lib/firebase/data";
 import { computeMetrics } from "@/lib/metrics";
-import type { ActivityEvent, Camera, Incident, School as SchoolDoc } from "@/types/monitor";
+import type {
+  ActivityEvent,
+  Camera,
+  Incident,
+  School as SchoolDoc,
+} from "@/types/monitor";
 
 const sortActivity = byNewest("timestamp");
 
@@ -29,8 +34,12 @@ export default function DashboardPage() {
   const { data: schools } = useCollection<SchoolDoc>("schools");
   const { data: cameras } = useCollection<Camera>("cameras", byId);
   const { data: incidents } = useCollection<Incident>("incidents");
-  const { data: activity } = useCollection<ActivityEvent>("activity_logs", sortActivity);
+  const { data: activity } = useCollection<ActivityEvent>(
+    "activity_logs",
+    sortActivity,
+  );
   const metrics = computeMetrics(schools, cameras, incidents);
+  const uptime = metrics.system_uptime_percentage;
 
   return (
     <div className="space-y-8">
@@ -41,13 +50,16 @@ export default function DashboardPage() {
             <span className="rounded-md bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-blue-400 border border-blue-500/20">
               PROGRAMA CORREDOR ESCOLAR CUIDADO
             </span>
-            <span className="text-xs text-slate-500">Ordenanza Catriel 2026</span>
+            <span className="text-xs text-slate-500">
+              Ordenanza Catriel 2026
+            </span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Tablero Central de Operaciones
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            Monitoreo perimetral preventivo en radio de 200 metros alrededor de los establecimientos educativos.
+            Monitoreo perimetral preventivo en radio de 200 metros alrededor de
+            los establecimientos educativos.
           </p>
         </div>
 
@@ -77,7 +89,6 @@ export default function DashboardPage() {
           subtitle="Catriel urbano"
           icon={<School className="h-5 w-5" />}
           highlightColor="indigo"
-          trend={{ value: "+1", isPositive: true, label: "incorporada este mes" }}
         />
 
         <StatCard
@@ -86,30 +97,37 @@ export default function DashboardPage() {
           subtitle={`de ${metrics.total_cameras} instaladas`}
           icon={<CheckCircle2 className="h-5 w-5" />}
           highlightColor="emerald"
-          trend={{ value: "92%", isPositive: true, label: "tasa de operatividad" }}
+          trend={{
+            value: `${Math.round(uptime)}%`,
+            isPositive: true,
+            label: "tasa de operatividad",
+          }}
         />
 
         <StatCard
           title="Cámaras con Alerta / Offline"
           value={metrics.cameras_offline + metrics.cameras_warning}
-          subtitle="1 alerta · 1 offline"
+          subtitle={`${metrics.cameras_warning} alerta · ${metrics.cameras_offline} offline`}
           icon={<AlertTriangle className="h-5 w-5" />}
           highlightColor="rose"
-          trend={{ value: "2", isPositive: false, label: "requieren inspección" }}
+          trend={{
+            value: String(metrics.cameras_offline + metrics.cameras_warning),
+            isPositive: false,
+            label: "requieren inspección",
+          }}
         />
 
         <StatCard
           title="Disponibilidad del Sistema"
           value={`${metrics.system_uptime_percentage}%`}
-          subtitle="SLA mensual"
+          subtitle="cámaras en línea ahora"
           icon={<Activity className="h-5 w-5" />}
           highlightColor="blue"
-          trend={{ value: "+0.4%", isPositive: true, label: "sobre el objetivo (98%)" }}
         />
       </div>
 
       {/* Charts Section */}
-      <DashboardCharts />
+      <DashboardCharts metrics={metrics} incidents={incidents} />
 
       {/* Two Column Layout: Quick Camera Status & Activity Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -149,7 +167,9 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold text-white">{cam.name}</p>
+                      <p className="text-xs font-semibold text-white">
+                        {cam.name}
+                      </p>
                       <span className="font-mono text-[10px] text-slate-400">
                         {cam.identifier}
                       </span>
@@ -162,8 +182,12 @@ export default function DashboardPage() {
 
                 <div className="flex items-center gap-3">
                   <div className="text-right hidden sm:block">
-                    <p className="text-[11px] font-mono text-slate-300">{cam.resolution}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{cam.fps} FPS</p>
+                    <p className="text-[11px] font-mono text-slate-300">
+                      {cam.resolution}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {cam.fps} FPS
+                    </p>
                   </div>
                   <StatusBadge status={cam.status} size="sm" />
                   <Link
@@ -187,4 +211,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
