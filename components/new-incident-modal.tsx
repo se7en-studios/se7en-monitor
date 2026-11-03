@@ -204,3 +204,4 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
     </div>
   );
 }
+

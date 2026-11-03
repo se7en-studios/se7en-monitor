@@ -232,3 +232,4 @@ export function CameraFullscreenModal({ camera, onClose }: CameraFullscreenModal
     </div>
   );
 }
+

@@ -199,3 +199,4 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
     </div>
   );
 }
+
