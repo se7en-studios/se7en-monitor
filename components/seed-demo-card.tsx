@@ -8,12 +8,15 @@ import { can } from "@/lib/roles";
 import { describeError, useToast } from "@/components/toast";
 import { Card, btnPrimary } from "@/components/ui";
 
+const IS_DEMO = process.env.NEXT_PUBLIC_DEMO === "1";
+
 export function SeedDemoCard() {
   const { profile } = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
-  if (!can.manageUsers(profile?.role)) return null;
+  // Solo en entornos de demostración (NEXT_PUBLIC_DEMO=1), nunca en producción.
+  if (!IS_DEMO || !can.manageUsers(profile?.role)) return null;
 
   async function onClick() {
     setBusy(true);

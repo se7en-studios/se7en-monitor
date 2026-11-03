@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCollection } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { navFor } from "@/components/sidebar";
 import { Kbd } from "@/components/ui";
@@ -55,7 +56,11 @@ function Palette({ onClose }: { onClose: () => void }) {
   const { profile } = useAuth();
   const { data: schools, loading: l1 } = useCollection<SchoolDoc>("schools");
   const { data: cameras, loading: l2 } = useCollection<Camera>("cameras");
-  const { data: incidents, loading: l3 } = useCollection<Incident>("incidents");
+  const { data: incidents, loading: l3 } = useCollection<Incident>(
+    "incidents",
+    undefined,
+    { enabled: can.handleIncidents(profile?.role) },
+  );
   const loading = l1 || l2 || l3;
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -104,7 +109,9 @@ function Palette({ onClose }: { onClose: () => void }) {
       label: c.name,
       hint: `${c.identifier} · ${CAMERA_STATUS[c.status] ?? c.status}`,
       icon: <Cctv size={16} />,
-      href: `/monitor/live?focus=${encodeURIComponent(c.id)}`,
+      href: can.watchLive(profile?.role)
+        ? `/monitor/live?cam=${encodeURIComponent(c.id)}`
+        : "/monitor/cameras",
     }));
     const incidentItems = incidents.map((i) => ({
       id: `i-${i.id}`,

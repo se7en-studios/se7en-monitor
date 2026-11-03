@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { btnGhost, btnPrimary } from "@/components/ui";
 import { X, Printer } from "lucide-react";
 import { useCollection } from "@/lib/firebase/data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { can } from "@/lib/roles";
 import { REPORT_KINDS, type ReportKind } from "@/lib/reports";
 import type { Camera, Incident, School } from "@/types/monitor";
 import {
@@ -24,7 +26,11 @@ interface ReportModalProps {
 export function ReportModal({ kind, onClose }: ReportModalProps) {
   const { data: schools } = useCollection<School>("schools");
   const { data: cameras } = useCollection<Camera>("cameras");
-  const { data: incidents } = useCollection<Incident>("incidents");
+  const { profile } = useAuth();
+  const canIncidents = can.handleIncidents(profile?.role);
+  const { data: incidents } = useCollection<Incident>("incidents", undefined, {
+    enabled: canIncidents,
+  });
 
   // Escape cierra el informe.
   useEffect(() => {
@@ -99,7 +105,10 @@ export function ReportModal({ kind, onClose }: ReportModalProps) {
             <CoverageSection schools={schools} cameras={cameras} />
           )}
           {kind === "availability" && (
-            <AvailabilitySection cameras={cameras} incidents={incidents} />
+            <AvailabilitySection
+              cameras={cameras}
+              incidents={canIncidents ? incidents : null}
+            />
           )}
           {kind === "audit" && <AuditSection />}
 

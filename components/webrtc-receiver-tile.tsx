@@ -5,16 +5,17 @@ import { Expand, Loader2, RefreshCw, Smartphone, WifiOff } from "lucide-react";
 import {
   describeSignalingError,
   startViewer,
+  type PeerHandle,
   type PeerStatus,
 } from "@/lib/firebase/webrtc";
 import { btnSecondary } from "@/components/ui";
 
-/** Estado visible del receptor: el de la conexión, o error / sin enlace. */
-export type ReceiverStatus = PeerStatus | "error" | "unlinked";
+/** Estado visible del receptor: el de la conexión, o error. */
+export type ReceiverStatus = PeerStatus | "error";
 
 interface WebRTCReceiverTileProps {
-  /** Token de vinculación de la cámara. Vacío: el celular todavía no fue vinculado. */
-  token: string;
+  /** Id de la cámara: la sesión de señalización es `camera_sessions/{cameraId}`. */
+  cameraId: string;
   isMuted?: boolean;
   /** Avisa cada cambio de estado (para mostrar «EN VIVO» solo si llega video). */
   onStatusChange?: (status: ReceiverStatus) => void;
@@ -24,24 +25,21 @@ interface WebRTCReceiverTileProps {
 
 const MESSAGES: Record<Exclude<ReceiverStatus, "live">, string> = {
   waiting:
-    "El celular no está transmitiendo. Abrí la consola transmisora en el teléfono vinculado.",
+    "El celular no está transmitiendo. Abrí la consola transmisora en el teléfono vinculado (si el enlace venció o fue revocado, hay que generar uno nuevo).",
   connecting: "Conectando con el celular…",
   taken:
     "Esta cámara se está viendo en otra pantalla. Se puede ver en un solo lugar a la vez.",
   error: "",
-  unlinked: "Este celular todavía no tiene un enlace de vinculación.",
 };
 
 export function WebRTCReceiverTile({
-  token,
+  cameraId,
   isMuted = true,
   onStatusChange,
   onOpenPairModal,
 }: WebRTCReceiverTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [status, setStatus] = useState<ReceiverStatus>(
-    token ? "connecting" : "unlinked",
-  );
+  const [status, setStatus] = useState<ReceiverStatus>("connecting");
   const [errorText, setErrorText] = useState("");
   const [attempt, setAttempt] = useState(0);
   const notify = useRef(onStatusChange);
@@ -50,25 +48,32 @@ export function WebRTCReceiverTile({
   useEffect(() => notify.current?.(status), [status]);
 
   useEffect(() => {
-    if (!token) {
-      setStatus("unlinked");
-      return;
-    }
+    // `cancelled` cubre el desmontaje antes de que startViewer termine (StrictMode
+    // monta dos veces): si llega tarde, se corta en el acto y no quedan listeners vivos.
+    let cancelled = false;
+    let handle: PeerHandle | null = null;
+    const fail = (err: unknown) => {
+      if (cancelled) return;
+      console.error("[webrtc] receptor", err);
+      setErrorText(describeSignalingError(err));
+      setStatus("error");
+    };
     setStatus("connecting");
-    const handle = startViewer({
-      sessionId: token,
+    startViewer({
+      cameraId,
       onRemoteStream: (stream) => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        if (!cancelled && videoRef.current) videoRef.current.srcObject = stream;
       },
-      onStatus: setStatus,
-      onError: (err) => {
-        console.error("[webrtc] receptor", err);
-        setErrorText(describeSignalingError(err));
-        setStatus("error");
-      },
-    });
-    return handle.stop;
-  }, [token, attempt]);
+      onStatus: (s) => !cancelled && setStatus(s),
+      onError: fail,
+    })
+      .then((h) => (cancelled ? h.stop() : (handle = h)))
+      .catch(fail);
+    return () => {
+      cancelled = true;
+      handle?.stop();
+    };
+  }, [cameraId, attempt]);
 
   const isLive = status === "live";
 
@@ -125,21 +130,23 @@ function ReceiverPlaceholder({
     <div className="flex flex-col items-center gap-2 p-5 text-center text-muted">
       {icon}
       <p className="max-w-xs text-[12px] leading-snug">{message}</p>
-      {(status === "error" || status === "taken" || status === "waiting") && (
-        <button type="button" className={btnSecondary} onClick={onRetry}>
-          <RefreshCw className="h-3.5 w-3.5" />
-          {status === "taken" ? "Ver en esta pantalla" : "Reintentar"}
-        </button>
-      )}
-      {status === "unlinked" && onOpenPairModal && (
-        <button
-          type="button"
-          className={btnSecondary}
-          onClick={onOpenPairModal}
-        >
-          Vincular celular
-        </button>
-      )}
+      <div className="flex flex-wrap justify-center gap-2">
+        {(status === "error" || status === "taken" || status === "waiting") && (
+          <button type="button" className={btnSecondary} onClick={onRetry}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            {status === "taken" ? "Ver en esta pantalla" : "Reintentar"}
+          </button>
+        )}
+        {status === "waiting" && onOpenPairModal && (
+          <button
+            type="button"
+            className={btnSecondary}
+            onClick={onOpenPairModal}
+          >
+            Vincular celular
+          </button>
+        )}
+      </div>
     </div>
   );
 }

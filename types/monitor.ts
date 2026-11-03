@@ -1,3 +1,5 @@
+import type { StoredDate } from "@/lib/time";
+
 export type EducationalLevel =
   "inicial" | "primario" | "secundario" | "tecnico" | "superior";
 
@@ -54,7 +56,6 @@ export interface Camera {
   ip_address?: string;
   stream_type: "webrtc" | "rtsp" | "hls";
   stream_url?: string;
-  publish_token?: string;
   resolution: string;
   fps: number;
   battery_level?: number;
@@ -88,6 +89,8 @@ export interface Incident {
   status: IncidentStatus;
   assigned_to: string;
   reported_at: string;
+  /** uid de quien lo reportó. Falta en datos viejos. */
+  reported_by?: string;
   resolved_at?: string | null;
   notes?: string;
   /** Último cambio de estado. Falta en datos viejos. */
@@ -125,8 +128,11 @@ export interface ActivityEvent {
   description: string;
   entity_type: "camera" | "school" | "incident" | "maintenance";
   entity_id?: string;
+  /** Email de quien lo hizo (lo validan las reglas). */
   actor: string;
-  timestamp: string;
+  actor_uid?: string;
+  /** Timestamp del servidor (nuevo) o ISO (datos viejos). */
+  timestamp: StoredDate;
 }
 
 export interface MaintenanceTicket {
@@ -142,6 +148,9 @@ export interface MaintenanceTicket {
   status: "pendiente" | "en_curso" | "completado";
   scheduled_for: string;
   created_at: string;
+  /** uid de quien la creó. Falta en datos viejos. */
+  reported_by?: string;
+  notes?: string;
   /** Último cambio de estado. Falta en datos viejos. */
   updated_at?: string;
   updated_by?: string;
@@ -179,7 +188,8 @@ export type AccessAction =
 /** Registro inmutable de quién accedió a qué. Lo escribe la app; lo lee solo la administración. */
 export interface AccessLog {
   id: string;
-  at: string;
+  /** Timestamp del servidor (nuevo) o ISO (datos viejos). */
+  at: StoredDate;
   action: AccessAction;
   actor_uid: string;
   actor_email: string;

@@ -19,6 +19,11 @@ interface AddSchoolModalProps {
 
 const parseCoord = (s: string) => Number.parseFloat(s.replace(",", "."));
 
+// Mismo formato que exigen las reglas de Firestore: mayúsculas, números y guiones.
+const CODE_RE = /^[A-Z0-9-]{1,20}$/;
+const normalizeCode = (s: string) =>
+  s.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
+
 export function AddSchoolModal({
   isOpen,
   onClose,
@@ -52,6 +57,8 @@ export function AddSchoolModal({
     e.preventDefault();
     if (!code.trim() || !name.trim() || !address.trim())
       return setError("Completá código, nombre y dirección.");
+    if (!CODE_RE.test(code.trim()))
+      return setError("El código solo admite mayúsculas, números y guiones (ej: ESC-218).");
     // La ubicación define el corredor de 200 m: no se puede inventar.
     if (!hasCoords)
       return setError(
@@ -97,7 +104,9 @@ export function AddSchoolModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Cerrar"
           className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground"
         >
           <X className="h-5 w-5" />
@@ -121,23 +130,33 @@ export function AddSchoolModal({
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-code"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Código Institucional
               </label>
               <input
+                id="as-code"
                 type="text"
+                maxLength={20}
+                autoCapitalize="characters"
                 required
                 placeholder="ej: ESC-218"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => setCode(normalizeCode(e.target.value))}
                 className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-level"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Nivel Educativo
               </label>
               <select
+                id="as-level"
                 value={level}
                 onChange={(e) => setLevel(e.target.value as EducationalLevel)}
                 className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
@@ -152,10 +171,14 @@ export function AddSchoolModal({
           </div>
 
           <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+            <label
+              htmlFor="as-management"
+              className="text-[11px] font-mono uppercase tracking-wider text-muted"
+            >
               Gestión
             </label>
             <select
+              id="as-management"
               value={management}
               onChange={(e) =>
                 setManagement(e.target.value as SchoolManagement)
@@ -168,11 +191,16 @@ export function AddSchoolModal({
           </div>
 
           <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+            <label
+              htmlFor="as-name"
+              className="text-[11px] font-mono uppercase tracking-wider text-muted"
+            >
               Nombre Oficial de la Escuela
             </label>
             <input
+              id="as-name"
               type="text"
+              maxLength={120}
               required
               placeholder="ej: Escuela Primaria N° 218 Barrio Rawson"
               value={name}
@@ -183,11 +211,16 @@ export function AddSchoolModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-address"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Dirección
               </label>
               <input
+                id="as-address"
                 type="text"
+                maxLength={200}
                 required
                 placeholder="Calle y altura"
                 value={address}
@@ -196,10 +229,14 @@ export function AddSchoolModal({
               />
             </div>
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-neighborhood"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Barrio (Catriel)
               </label>
               <input
+                id="as-neighborhood"
                 type="text"
                 placeholder="ej: Rawson / Preiss"
                 value={neighborhood}
@@ -211,10 +248,14 @@ export function AddSchoolModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-principal"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Directivo / Responsable
               </label>
               <input
+                id="as-principal"
                 type="text"
                 placeholder="Nombre del director"
                 value={principalName}
@@ -223,11 +264,15 @@ export function AddSchoolModal({
               />
             </div>
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              <label
+                htmlFor="as-phone"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
                 Teléfono Institucional
               </label>
               <input
-                type="text"
+                id="as-phone"
+                type="tel"
                 placeholder="(0299) 491-..."
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}

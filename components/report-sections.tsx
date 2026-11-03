@@ -3,6 +3,7 @@
 import { ShieldCheck } from "lucide-react";
 import { useCollection, useDocument, byNewest } from "@/lib/firebase/data";
 import { cameraCoverage } from "@/lib/geo";
+import { toDate } from "@/lib/time";
 import { ACCESS_ACTION_LABELS } from "@/lib/audit-labels";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import {
@@ -23,6 +24,8 @@ import type {
 const CLOSED: Incident["status"][] = ["resuelto", "cerrado"];
 const MANAGEMENT_LABELS = { estatal: "Estatal", privada: "Privada" } as const;
 const sortLogs = byNewest("at");
+// Los textos ISO viejos quedan antes que los Timestamp nuevos en el orden de Firestore.
+const AUDIT_QUERY = { orderByField: "at", limit: 500 };
 
 const TABLE = "w-full border-collapse text-left text-xs";
 const TH = "border-b border-[var(--line)] bg-[var(--well)] p-3";
@@ -161,11 +164,12 @@ export function AvailabilitySection({
   incidents,
 }: {
   cameras: Camera[];
-  incidents: Incident[];
+  /** null: el rol no puede ver incidentes y se omiten. */
+  incidents: Incident[] | null;
 }) {
   const online = cameras.filter((c) => c.status === "online").length;
   const down = cameras.filter((c) => c.status !== "online");
-  const open = incidents.filter((i) => !CLOSED.includes(i.status));
+  const open = (incidents ?? []).filter((i) => !CLOSED.includes(i.status));
   return (
     <section className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -175,8 +179,12 @@ export function AvailabilitySection({
           hint="Medición instantánea"
         />
         <ReportStat label="Sin señal / alerta" value={down.length} />
-        <ReportStat label="Incidentes abiertos" value={open.length} />
-        <ReportStat label="Incidentes totales" value={incidents.length} />
+        {incidents && (
+          <>
+            <ReportStat label="Incidentes abiertos" value={open.length} />
+            <ReportStat label="Incidentes totales" value={incidents.length} />
+          </>
+        )}
       </div>
       <SectionTitle n={1}>Cámaras que no están en línea</SectionTitle>
       {down.length === 0 ? (
@@ -225,6 +233,7 @@ export function AuditSection() {
   const { data: logs, loading } = useCollection<AccessLog>(
     "access_logs",
     sortLogs,
+    AUDIT_QUERY,
   );
   const byAction = new Map<AccessAction, number>();
   const people = new Set<string>();
@@ -268,7 +277,7 @@ export function AuditSection() {
             {logs.slice(0, 25).map((l) => (
               <tr key={l.id}>
                 <td className={`${TD} whitespace-nowrap font-mono text-muted`}>
-                  {new Date(l.at).toLocaleString("es-AR")}
+                  {toDate(l.at)?.toLocaleString("es-AR") ?? "Sin fecha"}
                 </td>
                 <td className={`${TD} text-foreground`}>
                   {l.actor_name} ·{" "}

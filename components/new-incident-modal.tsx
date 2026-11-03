@@ -10,6 +10,7 @@ import type {
   School,
 } from "@/types/monitor";
 import { newId, useCollection } from "@/lib/firebase/data";
+import { randomCode } from "@/lib/ids";
 import {
   INCIDENT_PRIORITY_LABELS,
   INCIDENT_TYPE_LABELS,
@@ -44,9 +45,9 @@ const EMPTY: Draft = {
   assignedTo: "",
 };
 
-/** Código legible y sin choques: INC-<año>-<4 caracteres al azar>. */
+/** Código legible: INC-<año>-<6 caracteres al azar (crypto)>. */
 const incidentCode = () =>
-  `INC-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  `INC-${new Date().getFullYear()}-${randomCode(6)}`;
 
 function buildIncident(
   d: Draft,
@@ -213,6 +214,7 @@ export function NewIncidentModal({
         <Field id="ni-title" text="Título">
           <input
             id="ni-title"
+            maxLength={200}
             className={input}
             placeholder="ej: Vehículo detenido sobre la senda escolar"
             value={draft.title}
@@ -223,6 +225,7 @@ export function NewIncidentModal({
           <textarea
             id="ni-desc"
             rows={3}
+            maxLength={2000}
             className={input}
             placeholder="Lo que se vio, dónde y a qué hora"
             value={draft.description}
@@ -232,6 +235,7 @@ export function NewIncidentModal({
         <Field id="ni-assigned" text="Asignado a (opcional)">
           <input
             id="ni-assigned"
+            maxLength={200}
             className={input}
             placeholder="ej: Guardia Urbana"
             value={draft.assignedTo}

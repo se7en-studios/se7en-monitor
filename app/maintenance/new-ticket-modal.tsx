@@ -2,13 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 import { Loader2, X } from "lucide-react";
-import { logActivity, newId, saveDoc } from "@/lib/firebase/data";
+import {
+  currentUid,
+  logActivity,
+  newId,
+  saveDoc,
+} from "@/lib/firebase/data";
+import { randomCode } from "@/lib/ids";
 import type { Camera, MaintenanceTicket } from "@/types/monitor";
 import { describeError, useToast } from "@/components/toast";
 import { btnPrimary, btnSecondary, input, label } from "@/components/ui";
 
-const ticketCode = () =>
-  `MNT-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+const ticketCode = () => `MNT-${new Date().getFullYear()}-${randomCode(6)}`;
 
 export function NewTicketModal({
   cameras,
@@ -53,6 +58,7 @@ export function NewTicketModal({
       status: "pendiente",
       scheduled_for: scheduledFor,
       created_at: new Date().toISOString(),
+      reported_by: currentUid(),
     };
     try {
       await saveDoc("maintenance_tickets", ticket);
@@ -115,6 +121,7 @@ export function NewTicketModal({
           </label>
           <input
             id="nt-title"
+            maxLength={200}
             className={input}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -126,6 +133,7 @@ export function NewTicketModal({
           </label>
           <input
             id="nt-tech"
+            maxLength={120}
             className={input}
             value={technician}
             onChange={(e) => setTechnician(e.target.value)}

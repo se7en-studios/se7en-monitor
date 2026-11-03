@@ -8,6 +8,8 @@ import { can, ROLE_LABELS, type Role } from "@/lib/roles";
 import { ACCESS_ACTION_LABELS } from "@/lib/audit-labels";
 import type { AccessAction, AccessLog } from "@/types/monitor";
 import { btnSecondary } from "@/components/ui";
+import { toDate } from "@/lib/time";
+import { csvRow } from "@/lib/csv";
 
 const sortLogs = byNewest("at");
 /** Se traen los últimos N registros; «Cargar más» suma otra tanda. */
@@ -15,13 +17,12 @@ const PAGE_SIZE = 500;
 const SELECT =
   "focus-ring rounded-full border border-[var(--line)] bg-panel px-3 py-2 text-[13px] text-foreground";
 
-const formatAt = (iso: string) =>
-  new Date(iso).toLocaleString("es-AR", {
+/** Fecha del registro: ISO (viejos) o Timestamp del servidor (nuevos). */
+const formatAt = (value: unknown) =>
+  toDate(value)?.toLocaleString("es-AR", {
     dateStyle: "short",
     timeStyle: "medium",
-  });
-
-const csvCell = (v: string) => `"${v.replaceAll('"', '""')}"`;
+  }) ?? "Sin fecha";
 
 function exportCsv(rows: AccessLog[]) {
   const header = [
@@ -33,25 +34,21 @@ function exportCsv(rows: AccessLog[]) {
     "Cámara",
     "Escuela",
   ];
+  // Las celdas que empiezan con = + - @ se neutralizan (inyección de fórmulas).
   const lines = rows.map((r) =>
-    [
+    csvRow([
       formatAt(r.at),
-      r.actor_name,
-      r.actor_email,
-      ROLE_LABELS[r.actor_role as Role] ?? r.actor_role,
-      ACCESS_ACTION_LABELS[r.action] ?? r.action,
+      String(r.actor_name ?? ""),
+      String(r.actor_email ?? ""),
+      ROLE_LABELS[r.actor_role as Role] ?? String(r.actor_role ?? ""),
+      ACCESS_ACTION_LABELS[r.action] ?? String(r.action ?? ""),
       r.camera_name ?? "",
       r.school_name ?? "",
-    ]
-      .map(csvCell)
-      .join(","),
+    ]),
   );
-  const blob = new Blob(
-    ["﻿" + [header.map(csvCell).join(","), ...lines].join("\n")],
-    {
-      type: "text/csv;charset=utf-8",
-    },
-  );
+  const blob = new Blob(["﻿" + [csvRow(header), ...lines].join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
