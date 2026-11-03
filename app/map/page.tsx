@@ -14,7 +14,7 @@ import {
   ExternalLink,
   Video,
 } from "lucide-react";
-import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
 import { StatusBadge } from "@/components/status-badge";
 import { School as SchoolType, Camera as CameraType } from "@/types/monitor";
 
@@ -33,11 +33,10 @@ const InteractiveMap = dynamic(
 );
 
 export default function MonitoringMapPage() {
-  const [schools] = useState<SchoolType[]>(MOCK_SCHOOLS);
-  const [cameras] = useState<CameraType[]>(MOCK_CAMERAS);
-  const [selectedEntity, setSelectedEntity] = useState<SchoolType | CameraType | null>(
-    MOCK_SCHOOLS[0]
-  );
+  const { data: schools } = useCollection<SchoolType>("schools");
+  const { data: cameras } = useCollection<CameraType>("cameras");
+  const [pickedEntity, setSelectedEntity] = useState<SchoolType | CameraType | null>(null);
+  const selectedEntity = pickedEntity ?? schools[0] ?? null;
   const [showRadius, setShowRadius] = useState(true);
   const [showCameras, setShowCameras] = useState(true);
 
@@ -160,7 +159,7 @@ export default function MonitoringMapPage() {
 
                   <div>
                     <span className="font-mono text-slate-500 text-[10px] uppercase">Cámaras Operativas</span>
-                    <p className="text-slate-200 font-mono mt-0.5">{selectedEntity.cameras_count} dispositivos</p>
+                    <p className="text-slate-200 font-mono mt-0.5">{cameras.filter((c) => c.school_id === selectedEntity.id).length} dispositivos</p>
                   </div>
 
                   <div>

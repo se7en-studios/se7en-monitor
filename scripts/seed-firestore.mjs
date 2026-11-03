@@ -1,152 +1,81 @@
-// Script de carga inicial (Seed) de datos para Cloud Firestore
-// Ejecutar con: node scripts/seed-firestore.mjs
+// Carga inicial de Firestore + creación del primer Super Admin (bypassa las reglas con firebase-admin).
+//
+// Requisitos:
+//   1. Firebase Console → Configuración del proyecto → Cuentas de servicio → "Generar nueva clave privada".
+//   2. Guardá el JSON FUERA del repo y exportá la ruta:
+//        PowerShell: $env:GOOGLE_APPLICATION_CREDENTIALS="C:\ruta\clave.json"
+//   3. Firebase Console → Authentication → habilitar "Correo electrónico/contraseña".
+//
+// Uso:
+//   SUPERADMIN_EMAIL=franco@... SUPERADMIN_PASSWORD=... SUPERADMIN_NAME="Franco" npm run seed:firebase
+//   (idempotente: si el usuario ya existe, solo actualiza su perfil; los datos demo no pisan lo existente
+//    salvo con SEED_FORCE=1)
 
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
-import * as dotenv from "dotenv";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import fs from "fs";
+import { initializeApp, applicationDefault } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
+import * as seed from "./seed-data.ts";
 
-// Cargar .env.local si existe
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const envPath = join(__dirname, "../.env.local");
+const { SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD, SUPERADMIN_NAME, SEED_FORCE } = process.env;
 
-if (fs.existsSync(envPath)) {
-  const envConfig = dotenv.parse(fs.readFileSync(envPath));
-  for (const k in envConfig) {
-    process.env[k] = envConfig[k];
-  }
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  console.error("❌ Falta GOOGLE_APPLICATION_CREDENTIALS (ruta al JSON de la cuenta de servicio).");
+  process.exit(1);
 }
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("your-")) {
-  console.error("❌ Error: Faltan las credenciales de Firebase en .env.local");
+if (!SUPERADMIN_EMAIL || !SUPERADMIN_PASSWORD) {
+  console.error("❌ Definí SUPERADMIN_EMAIL y SUPERADMIN_PASSWORD.");
   process.exit(1);
 }
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-const SCHOOLS = [
-  {
-    id: "sch-001",
-    code: "ESC-204",
-    name: "Escuela Primaria N° 204",
-    address: "Av. San Martín 450",
-    neighborhood: "Centro",
-    city: "Catriel",
-    province: "Río Negro",
-    lat: -37.8785,
-    lng: -67.7955,
-    educational_level: "primario",
-    principal_name: "Prof. Marta Silveira",
-    phone: "(0299) 491-1204",
-    email: "escuela204.catriel@educacion.rn.gov.ar",
-    perimeter_radius_meters: 200,
-    cameras_count: 5,
-    status: "operativo",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "sch-002",
-    code: "CEM-021",
-    name: "C.E.M. N° 21 (Secundario)",
-    address: "Alberdi y Jujuy s/n",
-    neighborhood: "Barrio Preiss",
-    city: "Catriel",
-    province: "Río Negro",
-    lat: -37.8812,
-    lng: -67.7928,
-    educational_level: "secundario",
-    principal_name: "Lic. Carlos Benítez",
-    phone: "(0299) 491-2121",
-    email: "cem21.catriel@educacion.rn.gov.ar",
-    perimeter_radius_meters: 200,
-    cameras_count: 6,
-    status: "operativo",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "sch-003",
-    code: "JAR-043",
-    name: "Jardín de Infantes N° 43 Rayito de Sol",
-    address: "Roca 320",
-    neighborhood: "Centro",
-    city: "Catriel",
-    province: "Río Negro",
-    lat: -37.8768,
-    lng: -67.7972,
-    educational_level: "inicial",
-    principal_name: "Directora Laura Méndez",
-    phone: "(0299) 491-3043",
-    email: "jardin43.catriel@educacion.rn.gov.ar",
-    perimeter_radius_meters: 200,
-    cameras_count: 3,
-    status: "operativo",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "sch-004",
-    code: "CET-007",
-    name: "C.E.T. N° 7 (Escuela Técnica)",
-    address: "Av. Mosconi y Formosa",
-    neighborhood: "Barrio YPF",
-    city: "Catriel",
-    province: "Río Negro",
-    lat: -37.8845,
-    lng: -67.7891,
-    educational_level: "tecnico",
-    principal_name: "Ing. Roberto Albarracín",
-    phone: "(0299) 491-4007",
-    email: "cet07.catriel@educacion.rn.gov.ar",
-    perimeter_radius_meters: 200,
-    cameras_count: 7,
-    status: "operativo",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "sch-005",
-    code: "ESC-195",
-    name: "Escuela Primaria N° 195",
-    address: "La Pampa 120",
-    neighborhood: "Barrio Carod",
-    city: "Catriel",
-    province: "Río Negro",
-    lat: -37.8869,
-    lng: -67.8015,
-    educational_level: "primario",
-    principal_name: "Prof. Silvia Morales",
-    phone: "(0299) 491-1195",
-    email: "escuela195.catriel@educacion.rn.gov.ar",
-    perimeter_radius_meters: 200,
-    cameras_count: 4,
-    status: "atencion_requerida",
-    created_at: new Date().toISOString(),
-  },
-];
-
-async function seed() {
-  console.log("🚀 Iniciando carga de escuelas en Firestore...");
-  for (const school of SCHOOLS) {
-    await setDoc(doc(db, "schools", school.id), school);
-    console.log(` ✅ Escuela registrada: ${school.name}`);
-  }
-  console.log("🎉 Carga completada con éxito en Firestore.");
-  process.exit(0);
-}
-
-seed().catch((err) => {
-  console.error("❌ Error en seed:", err);
-  process.exit(1);
+initializeApp({
+  credential: applicationDefault(),
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "monitoreo-camaras-977a6",
 });
+const auth = getAuth();
+const db = getFirestore();
 
+async function ensureSuperAdmin() {
+  let user;
+  try {
+    user = await auth.getUserByEmail(SUPERADMIN_EMAIL);
+  } catch (err) {
+    if (err.code !== "auth/user-not-found") throw err;
+    user = await auth.createUser({
+      email: SUPERADMIN_EMAIL,
+      password: SUPERADMIN_PASSWORD,
+      displayName: SUPERADMIN_NAME,
+    });
+  }
+  await db.doc(`profiles/${user.uid}`).set(
+    {
+      email: SUPERADMIN_EMAIL.toLowerCase(),
+      full_name: SUPERADMIN_NAME || SUPERADMIN_EMAIL,
+      role: "super_admin",
+      active: true,
+      created_at: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  console.log(`✅ Super Admin listo: ${SUPERADMIN_EMAIL}`);
+}
+
+async function seedCollection(name, docs) {
+  const existing = await db.collection(name).limit(1).get();
+  if (!existing.empty && !SEED_FORCE) {
+    console.log(`⏭️  ${name}: ya tiene datos (SEED_FORCE=1 para sobrescribir)`);
+    return;
+  }
+  const batch = db.batch();
+  for (const d of docs) batch.set(db.doc(`${name}/${d.id}`), d);
+  await batch.commit();
+  console.log(`✅ ${name}: ${docs.length} documentos`);
+}
+
+await ensureSuperAdmin();
+await seedCollection("schools", seed.MOCK_SCHOOLS);
+await seedCollection("cameras", seed.MOCK_CAMERAS);
+await seedCollection("incidents", seed.MOCK_INCIDENTS);
+await seedCollection("alerts", seed.MOCK_ALERTS);
+await seedCollection("maintenance_tickets", seed.MOCK_TICKETS);
+await seedCollection("activity_logs", seed.MOCK_ACTIVITY);
+console.log("🎉 Listo.");

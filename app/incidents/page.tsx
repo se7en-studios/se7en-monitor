@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection, saveDoc, patchDoc, logActivity, byNewest } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
 import {
   AlertTriangle,
   Search,
@@ -13,14 +16,17 @@ import {
   Filter,
   CheckCircle2,
 } from "lucide-react";
-import { MOCK_INCIDENTS } from "@/data/mock-data";
 import { Incident, IncidentStatus, IncidentPriority } from "@/types/monitor";
 import { NewIncidentModal } from "@/components/new-incident-modal";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
+const sortIncidents = byNewest("reported_at");
+
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
+  const { profile } = useAuth();
+  const canHandle = can.handleIncidents(profile?.role);
+  const { data: incidents } = useCollection<Incident>("incidents", sortIncidents);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -40,7 +46,17 @@ export default function IncidentsPage() {
   });
 
   const handleAddIncident = (newInc: Incident) => {
-    setIncidents([newInc, ...incidents]);
+    saveDoc("incidents", newInc)
+      .then(() =>
+        logActivity({
+          event_type: "incident_created",
+          title: "Incidente reportado",
+          description: `${newInc.code} · ${newInc.title}`,
+          entity_type: "incident",
+          entity_id: newInc.id,
+        })
+      )
+      .catch((err) => console.error("[incidents]", err));
   };
 
   const cycleStatus = (id: string, currentStatus: IncidentStatus) => {
@@ -52,10 +68,8 @@ export default function IncidentsPage() {
       cerrado: "nuevo",
     };
 
-    setIncidents(
-      incidents.map((i) =>
-        i.id === id ? { ...i, status: nextStatusMap[currentStatus] } : i
-      )
+    patchDoc("incidents", id, { status: nextStatusMap[currentStatus] }).catch((err) =>
+      console.error("[incidents]", err)
     );
   };
 
@@ -107,6 +121,7 @@ export default function IncidentsPage() {
         </div>
 
         <button
+          disabled={!canHandle}
           onClick={() => setIsNewModalOpen(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
         >
@@ -190,6 +205,7 @@ export default function IncidentsPage() {
                 </span>
 
                 <button
+                  disabled={!canHandle}
                   onClick={() => cycleStatus(inc.id, inc.status)}
                   className={cn(
                     "rounded-full border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase transition-transform active:scale-95 cursor-pointer hover:brightness-125",

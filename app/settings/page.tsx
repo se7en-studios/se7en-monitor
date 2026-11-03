@@ -11,7 +11,7 @@ export default function SettingsPage() {
           Ajustes y Parámetros de Seguridad
         </h1>
         <p className="text-xs text-slate-400">
-          Políticas de privacidad escolar, retención de telemetría y conexión con Supabase
+          Políticas de privacidad escolar, retención de telemetría y conexión con Firebase
         </p>
       </div>
 
@@ -56,7 +56,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Backend & Supabase Status */}
+        {/* Backend Status */}
         <div className="rounded-xl border border-white/[0.08] bg-[#0c101a] p-5 space-y-4">
           <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3 text-white font-semibold text-sm">
             <Database className="h-4 w-4 text-blue-400" />
@@ -66,7 +66,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-lg border border-white/[0.04] bg-[#070a12]">
               <span className="text-[10px] font-mono text-slate-500 uppercase">Señalización WebRTC</span>
-              <p className="text-slate-200 font-medium mt-1">Supabase Realtime Broadcast</p>
+              <p className="text-slate-200 font-medium mt-1">Firebase Firestore (señalización por sesión)</p>
             </div>
             <div className="p-3 rounded-lg border border-white/[0.04] bg-[#070a12]">
               <span className="text-[10px] font-mono text-slate-500 uppercase">Servidores STUN</span>

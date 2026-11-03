@@ -19,6 +19,8 @@ import {
   Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { can } from "@/lib/roles";
 
 const NAV_ITEMS = [
   {
@@ -83,6 +85,10 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { profile } = useAuth();
+  const navItems = NAV_ITEMS.filter(
+    (item) => item.href !== "/users" || can.manageUsers(profile?.role)
+  );
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/[0.08] bg-[#070a12] text-slate-300">
@@ -122,7 +128,7 @@ export function Sidebar() {
 
       {/* Navigation List */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));

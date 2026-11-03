@@ -16,11 +16,13 @@ import {
   Shield,
   Radio,
 } from "lucide-react";
-import { MOCK_CAMERAS, MOCK_SCHOOLS } from "@/data/mock-data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection, saveDoc, removeDoc, logActivity } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { AddCameraModal } from "@/components/add-camera-modal";
-import { Camera, CameraStatus } from "@/types/monitor";
+import { Camera, CameraStatus, School } from "@/types/monitor";
 import { formatTimeAgo } from "@/lib/utils";
 
 export default function CamerasManagerPage() {
@@ -29,7 +31,10 @@ export default function CamerasManagerPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [cameras, setCameras] = useState<Camera[]>(MOCK_CAMERAS);
+  const { profile } = useAuth();
+  const canEdit = can.editInfrastructure(profile?.role);
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const { data: schools } = useCollection<School>("schools");
 
   const filteredCameras = cameras.filter((cam) => {
     const matchesSearch =
@@ -48,12 +53,22 @@ export default function CamerasManagerPage() {
 
   const handleDelete = (id: string, name: string) => {
     if (confirm(`¿Está seguro de dar de baja el dispositivo '${name}' del Corredor Escolar?`)) {
-      setCameras(cameras.filter((c) => c.id !== id));
+      removeDoc("cameras", id).catch((err) => console.error("[cameras]", err));
     }
   };
 
   const handleAddCamera = (newCam: Camera) => {
-    setCameras([newCam, ...cameras]);
+    saveDoc("cameras", newCam)
+      .then(() =>
+        logActivity({
+          event_type: "camera_connected",
+          title: "Cámara registrada",
+          description: `${newCam.identifier} · ${newCam.name}`,
+          entity_type: "camera",
+          entity_id: newCam.id,
+        })
+      )
+      .catch((err) => console.error("[cameras]", err));
   };
 
   return (
@@ -85,6 +100,7 @@ export default function CamerasManagerPage() {
           </button>
 
           <button
+            disabled={!canEdit}
             onClick={() => setIsAddModalOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
           >
@@ -115,7 +131,7 @@ export default function CamerasManagerPage() {
             className="rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-slate-300 focus:border-blue-500/50 focus:outline-none"
           >
             <option value="all">Todas las Escuelas</option>
-            {MOCK_SCHOOLS.map((s) => (
+            {schools.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -206,6 +222,7 @@ export default function CamerasManagerPage() {
                       <Video className="h-4 w-4" />
                     </Link>
                     <button
+                      disabled={!canEdit}
                       onClick={() => handleDelete(cam.id, cam.name)}
                       className="rounded p-1.5 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400"
                       title="Eliminar dispositivo"

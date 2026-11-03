@@ -8,9 +8,11 @@ import {
   Shield,
   Clock,
   Sparkles,
-  ChevronDown,
+  LogOut,
 } from "lucide-react";
 import { ConnectMobileModal } from "./connect-mobile-modal";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { ROLE_LABELS } from "@/lib/roles";
 
 interface TopbarProps {
   onOpenCommandMenu?: () => void;
@@ -19,6 +21,13 @@ interface TopbarProps {
 export function Topbar({ onOpenCommandMenu }: TopbarProps) {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [time, setTime] = useState("");
+  const { profile, signOut } = useAuth();
+  const initials = (profile?.full_name ?? "?")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
 
   useEffect(() => {
     const updateTime = () => {
@@ -87,13 +96,15 @@ export function Topbar({ onOpenCommandMenu }: TopbarProps) {
           {/* User profile menu */}
           <div className="flex items-center gap-2.5 pl-2 border-l border-white/[0.08]">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 font-bold text-xs text-white shadow-inner">
-              OP
+              {initials}
             </div>
             <div className="hidden sm:block text-left leading-tight">
-              <p className="text-xs font-semibold text-white">Operador Sala 1</p>
-              <p className="text-[10px] text-slate-400">Super Admin</p>
+              <p className="text-xs font-semibold text-white">{profile?.full_name}</p>
+              <p className="text-[10px] text-slate-400">{profile ? ROLE_LABELS[profile.role] : ""}</p>
             </div>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+            <button onClick={signOut} title="Cerrar sesión" aria-label="Cerrar sesión" className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.06] hover:text-white">
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </header>

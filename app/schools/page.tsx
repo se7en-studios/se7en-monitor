@@ -14,15 +14,21 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react";
-import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection, saveDoc, logActivity } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
 import { StatusBadge } from "@/components/status-badge";
 import { AddSchoolModal } from "@/components/add-school-modal";
-import { School } from "@/types/monitor";
+import { School, Camera } from "@/types/monitor";
 
 export default function SchoolsPage() {
-  const [schools, setSchools] = useState<School[]>(MOCK_SCHOOLS);
+  const { profile } = useAuth();
+  const canEdit = can.editInfrastructure(profile?.role);
+  const { data: schools, loading } = useCollection<School>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSchool, setSelectedSchool] = useState<School | null>(MOCK_SCHOOLS[0]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedSchool = schools.find((s) => s.id === selectedId) ?? schools[0] ?? null;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const filteredSchools = schools.filter(
@@ -33,12 +39,22 @@ export default function SchoolsPage() {
   );
 
   const schoolCameras = selectedSchool
-    ? MOCK_CAMERAS.filter((c) => c.school_id === selectedSchool.id)
+    ? cameras.filter((c) => c.school_id === selectedSchool.id)
     : [];
 
   const handleAddSchool = (newSchool: School) => {
-    setSchools([newSchool, ...schools]);
-    setSelectedSchool(newSchool);
+    saveDoc("schools", newSchool)
+      .then(() => {
+        setSelectedId(newSchool.id);
+        return logActivity({
+          event_type: "school_registered",
+          title: "Escuela registrada",
+          description: `${newSchool.code} · ${newSchool.name}`,
+          entity_type: "school",
+          entity_id: newSchool.id,
+        });
+      })
+      .catch((err) => console.error("[schools]", err));
   };
 
   return (
@@ -61,6 +77,7 @@ export default function SchoolsPage() {
         </div>
 
         <button
+          disabled={!canEdit}
           onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
         >
@@ -93,7 +110,7 @@ export default function SchoolsPage() {
               return (
                 <div
                   key={school.id}
-                  onClick={() => setSelectedSchool(school)}
+                  onClick={() => setSelectedId(school.id)}
                   className={`cursor-pointer rounded-xl border p-4.5 transition-all duration-200 ${
                     isSelected
                       ? "border-blue-500/50 bg-[#121929] shadow-lg shadow-blue-600/10"
@@ -127,7 +144,7 @@ export default function SchoolsPage() {
                       <span className="flex items-center gap-1.5">
                         <Cctv className="h-3.5 w-3.5 text-blue-400" />
                         <span className="font-mono font-medium text-slate-200">
-                          {school.cameras_count} cámaras
+                          {cameras.filter((c) => c.school_id === school.id).length} cámaras
                         </span>
                       </span>
                       <span className="hidden sm:inline font-mono text-[11px] text-emerald-400">

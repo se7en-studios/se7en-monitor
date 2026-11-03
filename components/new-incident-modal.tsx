@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { X, AlertTriangle, ShieldAlert, Clock, User } from "lucide-react";
 import { Incident, IncidentPriority, IncidentType } from "@/types/monitor";
-import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
+import type { School, Camera } from "@/types/monitor";
 
 interface NewIncidentModalProps {
   isOpen: boolean;
@@ -14,8 +15,12 @@ interface NewIncidentModalProps {
 export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncidentModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [schoolId, setSchoolId] = useState(MOCK_SCHOOLS[0].id);
-  const [cameraId, setCameraId] = useState(MOCK_CAMERAS[0].id);
+  const { data: schools } = useCollection<School>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const [pickedSchool, setSchoolId] = useState("");
+  const [pickedCamera, setCameraId] = useState("");
+  const schoolId = pickedSchool || schools[0]?.id || "";
+  const cameraId = pickedCamera || cameras[0]?.id || "";
   const [type, setType] = useState<IncidentType>("perimetro_vulnerable");
   const [priority, setPriority] = useState<IncidentPriority>("media");
   const [assignedTo, setAssignedTo] = useState("Guardia Urbana Catriel");
@@ -25,10 +30,10 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !description) return;
+    if (!title || !description || !schoolId) return;
 
-    const school = MOCK_SCHOOLS.find((s) => s.id === schoolId);
-    const camera = MOCK_CAMERAS.find((c) => c.id === cameraId);
+    const school = schools.find((s) => s.id === schoolId);
+    const camera = cameras.find((c) => c.id === cameraId);
 
     const newIncident: Incident = {
       id: "inc-" + Math.random().toString(36).substring(2, 7),
@@ -133,7 +138,7 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
                 onChange={(e) => setSchoolId(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
               >
-                {MOCK_SCHOOLS.map((s) => (
+                {schools.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -149,7 +154,7 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
                 onChange={(e) => setCameraId(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
               >
-                {MOCK_CAMERAS.map((c) => (
+                {cameras.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.identifier} - {c.name}
                   </option>

@@ -1,7 +1,9 @@
 "use client";
 
 import { X, Printer, ShieldCheck, Download, Calendar, School, Activity } from "lucide-react";
-import { MOCK_METRICS, MOCK_SCHOOLS, MOCK_INCIDENTS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
+import { computeMetrics } from "@/lib/metrics";
+import type { Camera, Incident, School as SchoolDoc } from "@/types/monitor";
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -16,6 +18,11 @@ export function ReportModal({
   reportTitle = "Informe Oficial de Auditoría y Cobertura de Corredores Escolares",
   period = "Noviembre 2026",
 }: ReportModalProps) {
+  const { data: schools } = useCollection<SchoolDoc>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const { data: incidents } = useCollection<Incident>("incidents");
+  const metrics = computeMetrics(schools, cameras, incidents);
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -78,7 +85,7 @@ export function ReportModal({
             <div className="rounded-xl border border-white/[0.08] bg-[#0f1424] p-4 text-center">
               <span className="font-mono text-[10px] uppercase text-slate-400">Disponibilidad SLA</span>
               <p className="mt-1 font-mono text-2xl font-bold text-emerald-400">
-                {MOCK_METRICS.system_uptime_percentage}%
+                {metrics.system_uptime_percentage}%
               </p>
               <span className="text-[10px] text-slate-500">Objetivo contractual: 98%</span>
             </div>
@@ -86,7 +93,7 @@ export function ReportModal({
             <div className="rounded-xl border border-white/[0.08] bg-[#0f1424] p-4 text-center">
               <span className="font-mono text-[10px] uppercase text-slate-400">Perímetro Cubierto</span>
               <p className="mt-1 font-mono text-2xl font-bold text-cyan-400">
-                {MOCK_METRICS.corridor_meters_covered}m
+                {metrics.corridor_meters_covered}m
               </p>
               <span className="text-[10px] text-slate-500">Radio 200m por escuela</span>
             </div>
@@ -94,7 +101,7 @@ export function ReportModal({
             <div className="rounded-xl border border-white/[0.08] bg-[#0f1424] p-4 text-center">
               <span className="font-mono text-[10px] uppercase text-slate-400">Cámaras Operativas</span>
               <p className="mt-1 font-mono text-2xl font-bold text-blue-400">
-                {MOCK_METRICS.cameras_online} / {MOCK_METRICS.total_cameras}
+                {metrics.cameras_online} / {metrics.total_cameras}
               </p>
               <span className="text-[10px] text-slate-500">92% online ininterrumpido</span>
             </div>
@@ -117,13 +124,13 @@ export function ReportModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
-                  {MOCK_SCHOOLS.map((s) => (
+                  {schools.map((s) => (
                     <tr key={s.id}>
                       <td className="p-3 font-mono font-bold text-blue-400">{s.code}</td>
                       <td className="p-3 text-white print:text-black">{s.name}</td>
                       <td className="p-3 text-slate-400">{s.neighborhood}</td>
                       <td className="p-3 font-mono text-emerald-400">200 metros</td>
-                      <td className="p-3 text-right font-mono font-semibold">{s.cameras_count}</td>
+                      <td className="p-3 text-right font-mono font-semibold">{cameras.filter((c) => c.school_id === s.id).length}</td>
                     </tr>
                   ))}
                 </tbody>

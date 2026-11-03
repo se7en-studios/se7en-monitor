@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { X, Cctv, Shield, MapPin, Radio, Plus } from "lucide-react";
 import { Camera, CameraDeviceType, CameraLocationType } from "@/types/monitor";
-import { MOCK_SCHOOLS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
+import type { School } from "@/types/monitor";
 
 interface AddCameraModalProps {
   isOpen: boolean;
@@ -14,7 +15,9 @@ interface AddCameraModalProps {
 export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalProps) {
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
-  const [schoolId, setSchoolId] = useState(MOCK_SCHOOLS[0].id);
+  const { data: schools } = useCollection<School>("schools");
+  const [pickedSchool, setSchoolId] = useState("");
+  const schoolId = pickedSchool || schools[0]?.id || "";
   const [locationType, setLocationType] = useState<CameraLocationType>("acceso_principal");
   const [locationDetail, setLocationDetail] = useState("");
   const [deviceType, setDeviceType] = useState<CameraDeviceType>("ip_dome");
@@ -25,9 +28,9 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !identifier) return;
+    if (!name || !identifier || !schoolId) return;
 
-    const school = MOCK_SCHOOLS.find((s) => s.id === schoolId);
+    const school = schools.find((s) => s.id === schoolId);
 
     const newCamera: Camera = {
       id: "cam-" + Math.random().toString(36).substring(2, 7),
@@ -128,7 +131,7 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
               onChange={(e) => setSchoolId(e.target.value)}
               className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
             >
-              {MOCK_SCHOOLS.map((s) => (
+              {schools.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.code}) - {s.neighborhood}
                 </option>

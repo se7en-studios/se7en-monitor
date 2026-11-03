@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/lib/firebase/auth-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SE7EN MONITOR — Sistema de Monitoreo para Establecimientos Educativos",
+  title:
+    "SE7EN MONITOR — Sistema de Monitoreo para Establecimientos Educativos",
   description:
     "Plataforma inteligente de videovigilancia y corredores escolares cuidados para municipios e instituciones educativas.",
   icons: {
@@ -27,9 +29,10 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="antialiased selection:bg-blue-600/30 selection:text-blue-200">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );
 }
-

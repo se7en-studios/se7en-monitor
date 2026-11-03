@@ -15,7 +15,7 @@ import {
   Shield,
   RefreshCw,
 } from "lucide-react";
-import { MOCK_CAMERAS } from "@/data/mock-data";
+import { useCollection, byId } from "@/lib/firebase/data";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
@@ -29,12 +29,14 @@ export default function LiveMonitoringPage() {
   const [fullscreenCamera, setFullscreenCamera] = useState<Camera | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
+  const { data: cameras } = useCollection<Camera>("cameras", byId);
+
   const displayedCameras =
     gridLayout === "1x1"
-      ? MOCK_CAMERAS.slice(0, 1)
+      ? cameras.slice(0, 1)
       : gridLayout === "2x2"
-      ? MOCK_CAMERAS.slice(0, 4)
-      : MOCK_CAMERAS.slice(0, 9);
+      ? cameras.slice(0, 4)
+      : cameras.slice(0, 9);
 
   return (
     <div className="space-y-6">

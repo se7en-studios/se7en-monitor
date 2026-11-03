@@ -23,8 +23,8 @@ Inspirado en la ordenanza municipal de **Catriel (Río Negro)** sobre el **«Cor
 - **Frontend & Framework:** Next.js (App Router) + TypeScript + React 19
 - **Estilos & Diseño:** Tailwind CSS + Tokens Dark SaaS inspirados en Se7en Studio CRM
 - **Iconografía:** Lucide React
-- **Backend & Base de Datos:** Supabase (PostgreSQL 15+, Auth, Realtime)
-- **Streaming de Video:** WebRTC (`RTCPeerConnection` P2P + Señalización por Supabase Realtime Broadcast)
+- **Backend & Base de Datos:** Firebase (Cloud Firestore + Authentication, tiempo real con `onSnapshot`)
+- **Streaming de Video:** WebRTC (`RTCPeerConnection` P2P + Señalización por Firestore)
 - **Código QR:** Generador dinámico para vinculación de teléfonos celulares
 - **Despliegue:** Preparado para Vercel y GitHub
 
@@ -61,12 +61,12 @@ MONITOREO ESCUELAS/
 │   ├── status-badge.tsx          # Insignias de estado (Online, Alerta, Offline)
 │   └── connect-mobile-modal.tsx  # Modal con código QR para vincular celular
 ├── data/
-│   └── mock-data.ts              # Dataset representativo del corredor escolar de Catriel
+│   └── seed-data.ts              # Datos demo de Catriel (solo para `npm run seed:firebase`)
 ├── lib/
 │   ├── utils.ts                  # Helpers de clases y formateo de fechas
-│   └── supabase/                 # Conexión cliente/servidor a Supabase
-├── supabase/
-│   └── migrations/               # Esquema relacional SQL completo y políticas RLS
+│   ├── roles.ts                  # Roles y permisos (espejo de firestore.rules)
+│   └── firebase/                 # config, auth-context, data (onSnapshot/CRUD), webrtc
+├── firestore.rules               # Reglas por rol (desplegar con `firebase deploy --only firestore:rules`)
 ├── types/
 │   └── monitor.ts                # Modelos de datos en TypeScript
 ├── .env.example                  # Plantilla de variables de entorno
@@ -122,8 +122,20 @@ npm run dev
 
 ## 6. Próximas Etapas
 
-- **Etapa 2 (Supabase):** Conexión de base de datos en tiempo real y autenticación de operadores.
-- **Etapa 3 (CRM):** CRUD persistente de escuelas, dispositivos e incidentes.
+- ~~Etapa 2/3~~ Hecho: Firestore en tiempo real, login y roles; el Super Admin crea operadores en `/users`.
 - **Etapa 4 (Streaming Avanzado):** Pipeline WebRTC automatizado con servidor TURN/STUN para NAT traversal estricto.
 - **Etapa 5 (Expansión):** Georreferenciación dinámica con capas satelitales y reportería exportable a PDF/Excel.
 
+
+## 7. Puesta en marcha de Auth + Firestore
+
+1. Firebase Console → Authentication → habilitar **Correo electrónico/contraseña**.
+2. Desplegar reglas: `firebase deploy --only firestore:rules` (o pegar `firestore.rules` en la consola).
+3. Cuenta de servicio (Configuración del proyecto → Cuentas de servicio → Generar clave), guardada **fuera del repo**.
+4. Crear el primer Super Admin y cargar datos demo:
+   ```powershell
+   $env:GOOGLE_APPLICATION_CREDENTIALS="C:\ruta\clave.json"
+   $env:SUPERADMIN_EMAIL="tu@mail"; $env:SUPERADMIN_PASSWORD="..."; $env:SUPERADMIN_NAME="Tu Nombre"
+   npm run seed:firebase
+   ```
+5. Ingresar a la app y crear al resto de operadores desde **Usuarios y permisos**.

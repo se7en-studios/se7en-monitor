@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import { Bell, CheckCircle2, AlertOctagon, Info, ShieldAlert } from "lucide-react";
-import { MOCK_ALERTS } from "@/data/mock-data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection, patchDoc, byNewest } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
+import type { SystemAlert } from "@/types/monitor";
 import { formatTimeAgo } from "@/lib/utils";
 
-export default function AlertsPage() {
-  const [alerts, setAlerts] = useState(MOCK_ALERTS);
+const sortAlerts = byNewest("timestamp");
 
-  const toggleAcknowledge = (id: string) => {
-    setAlerts(
-      alerts.map((a) => (a.id === id ? { ...a, acknowledged: !a.acknowledged } : a))
+export default function AlertsPage() {
+  const { profile } = useAuth();
+  const { data: alerts, loading } = useCollection<SystemAlert>("alerts", sortAlerts);
+  const canHandle = can.handleIncidents(profile?.role);
+
+  const toggleAcknowledge = (alert: SystemAlert) =>
+    patchDoc("alerts", alert.id, { acknowledged: !alert.acknowledged }).catch((err) =>
+      console.error("[alerts]", err)
     );
-  };
 
   return (
     <div className="space-y-6">
@@ -31,6 +36,7 @@ export default function AlertsPage() {
       </div>
 
       <div className="space-y-3">
+        {loading && <p className="text-xs text-slate-500">Cargando…</p>}
         {alerts.map((alert) => (
           <div
             key={alert.id}
@@ -65,7 +71,8 @@ export default function AlertsPage() {
             </div>
 
             <button
-              onClick={() => toggleAcknowledge(alert.id)}
+              disabled={!canHandle}
+              onClick={() => toggleAcknowledge(alert)}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors shrink-0 ${
                 alert.acknowledged
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"

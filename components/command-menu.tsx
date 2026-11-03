@@ -14,12 +14,16 @@ import {
   X,
   ArrowRight,
 } from "lucide-react";
-import { MOCK_SCHOOLS, MOCK_CAMERAS, MOCK_INCIDENTS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
+import type { Camera, Incident, School as SchoolDoc } from "@/types/monitor";
 
 export function CommandMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const router = useRouter();
+  const { data: schools } = useCollection<SchoolDoc>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const { data: incidents } = useCollection<Incident>("incidents");
 
   // Listen to Ctrl+K or Cmd+K
   useEffect(() => {
@@ -39,19 +43,19 @@ export function CommandMenu() {
 
   if (!isOpen) return null;
 
-  const filteredSchools = MOCK_SCHOOLS.filter(
+  const filteredSchools = schools.filter(
     (s) =>
       s.name.toLowerCase().includes(query.toLowerCase()) ||
       s.code.toLowerCase().includes(query.toLowerCase())
   );
 
-  const filteredCameras = MOCK_CAMERAS.filter(
+  const filteredCameras = cameras.filter(
     (c) =>
       c.name.toLowerCase().includes(query.toLowerCase()) ||
       c.identifier.toLowerCase().includes(query.toLowerCase())
   );
 
-  const filteredIncidents = MOCK_INCIDENTS.filter(
+  const filteredIncidents = incidents.filter(
     (i) =>
       i.title.toLowerCase().includes(query.toLowerCase()) ||
       i.code.toLowerCase().includes(query.toLowerCase())

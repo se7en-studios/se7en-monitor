@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   School,
@@ -17,14 +19,19 @@ import { StatCard } from "@/components/stat-card";
 import { DashboardCharts } from "@/components/dashboard-charts";
 import { ActivityFeed } from "@/components/activity-feed";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  MOCK_METRICS,
-  MOCK_CAMERAS,
-  MOCK_ACTIVITY,
-  MOCK_SCHOOLS,
-} from "@/data/mock-data";
+import { useCollection, byId, byNewest } from "@/lib/firebase/data";
+import { computeMetrics } from "@/lib/metrics";
+import type { ActivityEvent, Camera, Incident, School as SchoolDoc } from "@/types/monitor";
+
+const sortActivity = byNewest("timestamp");
 
 export default function DashboardPage() {
+  const { data: schools } = useCollection<SchoolDoc>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras", byId);
+  const { data: incidents } = useCollection<Incident>("incidents");
+  const { data: activity } = useCollection<ActivityEvent>("activity_logs", sortActivity);
+  const metrics = computeMetrics(schools, cameras, incidents);
+
   return (
     <div className="space-y-8">
       {/* Header & Quick Actions */}
@@ -66,7 +73,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Escuelas Registradas"
-          value={MOCK_METRICS.total_schools}
+          value={metrics.total_schools}
           subtitle="Catriel urbano"
           icon={<School className="h-5 w-5" />}
           highlightColor="indigo"
@@ -75,8 +82,8 @@ export default function DashboardPage() {
 
         <StatCard
           title="Cámaras Operativas"
-          value={MOCK_METRICS.cameras_online}
-          subtitle={`de ${MOCK_METRICS.total_cameras} instaladas`}
+          value={metrics.cameras_online}
+          subtitle={`de ${metrics.total_cameras} instaladas`}
           icon={<CheckCircle2 className="h-5 w-5" />}
           highlightColor="emerald"
           trend={{ value: "92%", isPositive: true, label: "tasa de operatividad" }}
@@ -84,7 +91,7 @@ export default function DashboardPage() {
 
         <StatCard
           title="Cámaras con Alerta / Offline"
-          value={MOCK_METRICS.cameras_offline + MOCK_METRICS.cameras_warning}
+          value={metrics.cameras_offline + metrics.cameras_warning}
           subtitle="1 alerta · 1 offline"
           icon={<AlertTriangle className="h-5 w-5" />}
           highlightColor="rose"
@@ -93,7 +100,7 @@ export default function DashboardPage() {
 
         <StatCard
           title="Disponibilidad del Sistema"
-          value={`${MOCK_METRICS.system_uptime_percentage}%`}
+          value={`${metrics.system_uptime_percentage}%`}
           subtitle="SLA mensual"
           icon={<Activity className="h-5 w-5" />}
           highlightColor="blue"
@@ -121,13 +128,13 @@ export default function DashboardPage() {
               href="/monitor/cameras"
               className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300"
             >
-              <span>Ver todas ({MOCK_CAMERAS.length})</span>
+              <span>Ver todas ({cameras.length})</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
           <div className="mt-4 divide-y divide-white/[0.04]">
-            {MOCK_CAMERAS.slice(0, 5).map((cam) => (
+            {cameras.slice(0, 5).map((cam) => (
               <div
                 key={cam.id}
                 className="flex items-center justify-between py-3.5 hover:bg-white/[0.02] px-2 rounded-lg transition-colors"
@@ -174,7 +181,7 @@ export default function DashboardPage() {
 
         {/* Right Column: Real-time Activity Feed */}
         <div className="lg:col-span-1">
-          <ActivityFeed events={MOCK_ACTIVITY} />
+          <ActivityFeed events={activity.slice(0, 20)} />
         </div>
       </div>
     </div>
