@@ -213,3 +213,39 @@ th {
 .animate-live-pulse {
   animation: live-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Informes: al imprimir o guardar como PDF sale solo el documento, en blanco y negro. */
+@media print {
+  :root {
+    --background: #fff;
+    --foreground: #0b0b0c;
+    --muted: #555;
+    --border: rgba(0, 0, 0, 0.15);
+    --panel: #fff;
+    --panel-2: #f4f4f4;
+    --well: #f4f4f4;
+    --line: rgba(0, 0, 0, 0.15);
+    --line-strong: rgba(0, 0, 0, 0.3);
+    --accent: #1f4fd6;
+    --accent-soft: rgba(31, 79, 214, 0.08);
+  }
+  body > *:not(.report-print-root) {
+    display: none !important;
+  }
+  .report-print-root {
+    position: static !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .report-frame {
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+  }
+  .report-scroll {
+    overflow: visible !important;
+  }
+  .print-hidden {
+    display: none !important;
+  }
+}

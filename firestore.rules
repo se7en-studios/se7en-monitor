@@ -33,6 +33,20 @@ service cloud.firestore {
       allow write: if hasRole(['super_admin', 'municipal_admin', 'maintenance_tech']);
     }
 
+    // Marco operativo que define el Municipio: lo lee todo el personal, lo edita el Super Admin.
+    match /settings/{id} {
+      allow read: if isStaff();
+      allow write: if hasRole(['super_admin']);
+    }
+
+    // Quién accedió a qué: cada persona solo puede registrar sus propios accesos,
+    // lo lee la administración y nadie lo modifica ni lo borra.
+    match /access_logs/{id} {
+      allow create: if isStaff() && request.resource.data.actor_uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // Bitácora inmutable
     match /activity_logs/{id} {
       allow read: if isStaff();

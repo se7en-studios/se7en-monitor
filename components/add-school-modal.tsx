@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { X, School, MapPin, Phone, Mail, User, ShieldCheck } from "lucide-react";
-import { School as SchoolType, EducationalLevel } from "@/types/monitor";
+import {
+  School as SchoolType,
+  EducationalLevel,
+  SchoolManagement,
+} from "@/types/monitor";
 
 interface AddSchoolModalProps {
   isOpen: boolean;
@@ -16,6 +20,7 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
   const [address, setAddress] = useState("");
   const [neighborhood, setNeighborhood] = useState("Centro");
   const [level, setLevel] = useState<EducationalLevel>("primario");
+  const [management, setManagement] = useState<SchoolManagement>("estatal");
   const [principalName, setPrincipalName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -37,6 +42,7 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
       lat: -37.8812 + (Math.random() - 0.5) * 0.01,
       lng: -67.7955 + (Math.random() - 0.5) * 0.01,
       educational_level: level,
+      management,
       principal_name: principalName || "A designar",
       phone: phone || "(0299) 491-0000",
       email: email || `${code.toLowerCase()}@educacion.rn.gov.ar`,
@@ -103,6 +109,20 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
                 <option value="superior">Superior</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+              Gestión
+            </label>
+            <select
+              value={management}
+              onChange={(e) => setManagement(e.target.value as SchoolManagement)}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
+            >
+              <option value="estatal">Estatal (pública)</option>
+              <option value="privada">Privada</option>
+            </select>
           </div>
 
           <div>

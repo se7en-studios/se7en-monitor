@@ -28,6 +28,8 @@ const OPERATORS: Role[] = [...ADMINS, "monitoring_operator"];
 
 export const can = {
   manageUsers: (r?: Role) => r === "super_admin",
+  viewAudit: (r?: Role) => !!r && ADMINS.includes(r),
+  editPolicy: (r?: Role) => r === "super_admin",
   editInfrastructure: (r?: Role) => !!r && ADMINS.includes(r), // escuelas y cámaras
   handleIncidents: (r?: Role) => !!r && OPERATORS.includes(r), // incidentes y alertas
   handleMaintenance: (r?: Role) =>

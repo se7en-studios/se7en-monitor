@@ -125,10 +125,9 @@ export function InteractiveMap({
       cameras.forEach((cam, index) => {
         // Place cameras geographically spaced around their associated school
         const targetSchool = schools.find((s) => s.id === cam.school_id) || schools[0];
-        const offsetLat = ((index % 3) - 1) * 0.0011;
-        const offsetLng = (((index + 1) % 3) - 1) * 0.0013;
-        const camLat = targetSchool.lat + offsetLat;
-        const camLng = targetSchool.lng + offsetLng;
+        // Posición real si la cámara la tiene; en datos viejos, repartida alrededor de la escuela.
+        const camLat = cam.lat ?? targetSchool.lat + ((index % 3) - 1) * 0.0011;
+        const camLng = cam.lng ?? targetSchool.lng + (((index + 1) % 3) - 1) * 0.0013;
 
         const isMobile = cam.device_type === "mobile_webrtc";
         const color =

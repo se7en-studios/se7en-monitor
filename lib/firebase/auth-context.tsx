@@ -16,6 +16,23 @@ import {
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./config";
 import type { Role } from "@/lib/roles";
+import { logAccess } from "./audit";
+
+const LOGIN_LOGGED_KEY = "se7en-monitor-login-logged";
+
+/** Un registro de ingreso por sesión del navegador, no uno por cada recarga. */
+function recordLogin(profile: Profile) {
+  try {
+    if (sessionStorage.getItem(LOGIN_LOGGED_KEY) === profile.id) return;
+    sessionStorage.setItem(LOGIN_LOGGED_KEY, profile.id);
+  } catch {
+    // Sin sessionStorage se registra igual: es preferible a no dejar rastro.
+  }
+  void logAccess(
+    { action: "login" },
+    { name: profile.full_name, role: profile.role },
+  );
+}
 
 export interface Profile {
   id: string;
@@ -58,10 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onSnapshot(
       doc(db, "profiles", user.uid),
       (snap) => {
-        setProfile(
-          snap.exists() ? ({ ...snap.data(), id: snap.id } as Profile) : null,
-        );
+        const next = snap.exists()
+          ? ({ ...snap.data(), id: snap.id } as Profile)
+          : null;
+        setProfile(next);
         setProfileReady(true);
+        if (next?.active) recordLogin(next);
       },
       (err) => {
         console.error("[auth] no se pudo leer el perfil", err);

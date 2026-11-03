@@ -1,5 +1,6 @@
 import { Settings, Shield, Lock, EyeOff, Bell, Database } from "lucide-react";
 import { SeedDemoCard } from "@/components/seed-demo-card";
+import { PolicyCard } from "@/components/policy-card";
 
 export default function SettingsPage() {
   return (
@@ -75,6 +76,8 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        <PolicyCard />
 
         <SeedDemoCard />
       </div>

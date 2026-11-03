@@ -20,6 +20,7 @@ export const MOCK_SCHOOLS: School[] = [
     lat: -37.8785,
     lng: -67.7955,
     educational_level: "primario",
+    management: "estatal",
     principal_name: "Prof. Marta Silveira",
     phone: "(0299) 491-1204",
     email: "escuela204.catriel@educacion.rn.gov.ar",
@@ -39,6 +40,7 @@ export const MOCK_SCHOOLS: School[] = [
     lat: -37.8812,
     lng: -67.7928,
     educational_level: "secundario",
+    management: "estatal",
     principal_name: "Lic. Carlos Benítez",
     phone: "(0299) 491-2121",
     email: "cem21.catriel@educacion.rn.gov.ar",
@@ -58,6 +60,7 @@ export const MOCK_SCHOOLS: School[] = [
     lat: -37.8768,
     lng: -67.7972,
     educational_level: "inicial",
+    management: "estatal",
     principal_name: "Directora Laura Méndez",
     phone: "(0299) 491-3043",
     email: "jardin43.catriel@educacion.rn.gov.ar",
@@ -77,6 +80,7 @@ export const MOCK_SCHOOLS: School[] = [
     lat: -37.8845,
     lng: -67.7891,
     educational_level: "tecnico",
+    management: "estatal",
     principal_name: "Ing. Roberto Albarracín",
     phone: "(0299) 491-4007",
     email: "cet07.catriel@educacion.rn.gov.ar",
@@ -96,6 +100,7 @@ export const MOCK_SCHOOLS: School[] = [
     lat: -37.8869,
     lng: -67.8015,
     educational_level: "primario",
+    management: "estatal",
     principal_name: "Prof. Silvia Morales",
     phone: "(0299) 491-1195",
     email: "escuela195.catriel@educacion.rn.gov.ar",
@@ -106,7 +111,7 @@ export const MOCK_SCHOOLS: School[] = [
   },
 ];
 
-export const MOCK_CAMERAS: Camera[] = [
+const RAW_CAMERAS: Camera[] = [
   {
     id: "cam-001",
     school_id: "sch-001",
@@ -253,6 +258,17 @@ export const MOCK_CAMERAS: Camera[] = [
     installed_at: "2026-11-02",
   },
 ];
+
+// Posición real de cada cámara demo: repartidas alrededor de su escuela, siempre dentro de los 200 m.
+export const MOCK_CAMERAS: Camera[] = RAW_CAMERAS.map((cam, index) => {
+  const school = MOCK_SCHOOLS.find((s) => s.id === cam.school_id);
+  if (!school) return cam;
+  return {
+    ...cam,
+    lat: school.lat + ((index % 3) - 1) * 0.0011,
+    lng: school.lng + (((index + 1) % 3) - 1) * 0.0013,
+  };
+});
 
 export const MOCK_INCIDENTS: Incident[] = [
   {

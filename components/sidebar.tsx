@@ -15,6 +15,7 @@ import {
   Users,
   Settings,
   Radio,
+  ScrollText,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -73,6 +74,7 @@ const NAV: NavGroup[] = [
     title: "Sistema",
     items: [
       { name: "Usuarios", href: "/users", icon: Users },
+      { name: "Auditoría", href: "/audit", icon: ScrollText },
       { name: "Configuración", href: "/settings", icon: Settings },
     ],
   },
@@ -105,7 +107,9 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
   const groups = NAV.map((g) => ({
     ...g,
     items: g.items.filter(
-      (i) => i.href !== "/users" || can.manageUsers(profile?.role),
+      (i) =>
+        (i.href !== "/users" || can.manageUsers(profile?.role)) &&
+        (i.href !== "/audit" || can.viewAudit(profile?.role)),
     ),
   })).filter((g) => g.items.length > 0);
 

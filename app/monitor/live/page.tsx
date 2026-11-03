@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Grid2X2,
   Grid3X3,
@@ -16,6 +16,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useCollection, byId } from "@/lib/firebase/data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { logAccess } from "@/lib/firebase/audit";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
@@ -30,6 +32,17 @@ export default function LiveMonitoringPage() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   const { data: cameras } = useCollection<Camera>("cameras", byId);
+  const { profile } = useAuth();
+
+  // Entrar al monitoreo en vivo queda registrado (una vez por visita a la pantalla).
+  useEffect(() => {
+    if (!profile) return;
+    void logAccess(
+      { action: "ver_monitoreo_en_vivo" },
+      { name: profile.full_name, role: profile.role }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   const displayedCameras =
     gridLayout === "1x1"

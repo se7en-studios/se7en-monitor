@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Cctv, Shield, MapPin, Radio, Plus } from "lucide-react";
 import { Camera, CameraDeviceType, CameraLocationType } from "@/types/monitor";
 import { useCollection } from "@/lib/firebase/data";
+import { distanceMeters } from "@/lib/geo";
 import type { School } from "@/types/monitor";
 
 interface AddCameraModalProps {
@@ -23,14 +24,22 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
   const [deviceType, setDeviceType] = useState<CameraDeviceType>("ip_dome");
   const [ipAddress, setIpAddress] = useState("192.168.10.55");
   const [resolution, setResolution] = useState("1080p FHD");
+  const [latText, setLatText] = useState("");
+  const [lngText, setLngText] = useState("");
+
+  const school = schools.find((s) => s.id === schoolId);
+  const lat = Number.parseFloat(latText.replace(",", "."));
+  const lng = Number.parseFloat(lngText.replace(",", "."));
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+  const distance = school && hasCoords ? distanceMeters(school, { lat, lng }) : null;
+  const radius = school?.perimeter_radius_meters ?? 200;
+  const isOutside = distance !== null && distance > radius;
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !identifier || !schoolId) return;
-
-    const school = schools.find((s) => s.id === schoolId);
+    if (!name || !identifier || !schoolId || !hasCoords || isOutside) return;
 
     const newCamera: Camera = {
       id: "cam-" + Math.random().toString(36).substring(2, 7),
@@ -41,13 +50,16 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
       location_type: locationType,
       location_detail: locationDetail || "Punto de monitoreo perimetral 200m",
       device_type: deviceType,
-      status: "online",
-      last_heartbeat: new Date().toISOString(),
+      // Recién dada de alta no transmite todavía: pasa a "online" cuando reporta señal.
+      status: "offline",
+      last_heartbeat: null,
+      lat,
+      lng,
       ip_address: ipAddress,
       stream_type: "webrtc",
       resolution,
       fps: 30,
-      is_live: true,
+      is_live: false,
       installed_at: new Date().toISOString().split("T")[0],
     };
 
@@ -139,6 +151,56 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
             </select>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
+                Ubicación (latitud, longitud)
+              </label>
+              {school && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLatText(String(school.lat));
+                    setLngText(String(school.lng));
+                  }}
+                  className="text-[11px] text-accent hover:underline"
+                >
+                  Partir de la escuela
+                </button>
+              )}
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                inputMode="decimal"
+                required
+                placeholder="-37.8785"
+                value={latText}
+                onChange={(e) => setLatText(e.target.value)}
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              />
+              <input
+                type="text"
+                inputMode="decimal"
+                required
+                placeholder="-67.7955"
+                value={lngText}
+                onChange={(e) => setLngText(e.target.value)}
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              />
+            </div>
+            {distance !== null && (
+              <p
+                role={isOutside ? "alert" : undefined}
+                className={`mt-1.5 text-[11px] ${isOutside ? "text-red-400" : "text-emerald-300"}`}
+              >
+                {isOutside
+                  ? `Fuera del corredor: está a ${Math.round(distance)} m de la escuela y el límite es ${radius} m.`
+                  : `Dentro del corredor: a ${Math.round(distance)} m de la escuela (límite ${radius} m).`}
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
@@ -195,9 +257,10 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
             </button>
             <button
               type="submit"
-              className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)]"
+              disabled={!hasCoords || isOutside}
+              className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-40"
             >
-              Conectar y Activar Cámara
+              Dar de alta la cámara
             </button>
           </div>
         </form>

@@ -13,6 +13,8 @@ import {
   Wifi,
 } from "lucide-react";
 import QRCode from "qrcode";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { logAccess } from "@/lib/firebase/audit";
 
 interface ConnectMobileModalProps {
   isOpen: boolean;
@@ -23,6 +25,17 @@ export function ConnectMobileModal({ isOpen, onClose }: ConnectMobileModalProps)
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [useNetworkIp, setUseNetworkIp] = useState(true);
+  const { profile } = useAuth();
+
+  // Generar el enlace para vincular un celular queda registrado.
+  useEffect(() => {
+    if (!isOpen || !profile) return;
+    void logAccess(
+      { action: "vincular_celular" },
+      { name: profile.full_name, role: profile.role }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, profile?.id]);
 
   // Token estable para emparejar con la cámara fija del dashboard
   const token = "demo-mobile-token-se7en";

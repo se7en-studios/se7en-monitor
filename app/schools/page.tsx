@@ -15,11 +15,12 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
-import { useCollection, saveDoc, logActivity } from "@/lib/firebase/data";
+import { useCollection, saveDoc, patchDoc, logActivity } from "@/lib/firebase/data";
+import { cameraCoverage } from "@/lib/geo";
 import { can } from "@/lib/roles";
 import { StatusBadge } from "@/components/status-badge";
 import { AddSchoolModal } from "@/components/add-school-modal";
-import { School, Camera } from "@/types/monitor";
+import { School, Camera, SchoolManagement } from "@/types/monitor";
 
 export default function SchoolsPage() {
   const { profile } = useAuth();
@@ -41,6 +42,16 @@ export default function SchoolsPage() {
   const schoolCameras = selectedSchool
     ? cameras.filter((c) => c.school_id === selectedSchool.id)
     : [];
+
+  const coverage = schoolCameras.map((c) => cameraCoverage(c, selectedSchool ?? undefined));
+  const inside = coverage.filter((c) => c === "dentro").length;
+  const unlocated = coverage.filter((c) => c === "sin_ubicacion").length;
+  const outside = coverage.filter((c) => c === "fuera").length;
+  const coverageSummary = schoolCameras.length
+    ? `${inside} de ${schoolCameras.length} cámaras verificadas dentro del radio` +
+      (outside ? ` · ${outside} fuera` : "") +
+      (unlocated ? ` · ${unlocated} sin ubicación` : "")
+    : "Sin cámaras instaladas: esta escuela todavía no tiene cobertura.";
 
   const handleAddSchool = (newSchool: School) => {
     saveDoc("schools", newSchool)
@@ -180,6 +191,23 @@ export default function SchoolsPage() {
                 <p className="text-xs text-muted mt-0.5">
                   Nivel: <span className="text-foreground uppercase font-mono">{selectedSchool.educational_level}</span>
                 </p>
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  Gestión:
+                  <select
+                    value={selectedSchool.management ?? ""}
+                    disabled={!canEdit}
+                    onChange={(e) =>
+                      patchDoc("schools", selectedSchool.id, {
+                        management: e.target.value as SchoolManagement,
+                      }).catch((err) => console.error("[schools]", err))
+                    }
+                    className="focus-ring rounded-full border border-[var(--line)] bg-[var(--well)] px-2.5 py-1 text-xs text-foreground disabled:opacity-70"
+                  >
+                    {!selectedSchool.management && <option value="">Sin dato</option>}
+                    <option value="estatal">Estatal</option>
+                    <option value="privada">Privada</option>
+                  </select>
+                </label>
               </div>
 
               {/* Data attributes */}
@@ -204,10 +232,12 @@ export default function SchoolsPage() {
                 <div className="rounded-lg border border-accent/20 bg-accent-soft p-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-accent">Corredor Escolar Cuidado</span>
-                    <span className="font-mono text-accent font-bold">200 Metros</span>
+                    <span className="font-mono text-accent font-bold">
+                      {selectedSchool.perimeter_radius_meters} Metros
+                    </span>
                   </div>
                   <p className="text-[11px] text-muted mt-1">
-                    Cámaras perimetrales calibradas en el radio legal municipal.
+                    {coverageSummary}
                   </p>
                 </div>
               </div>

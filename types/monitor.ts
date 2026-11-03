@@ -2,6 +2,8 @@ export type EducationalLevel = "inicial" | "primario" | "secundario" | "tecnico"
 
 export type SchoolStatus = "operativo" | "en_obra" | "atencion_requerida";
 
+export type SchoolManagement = "estatal" | "privada";
+
 export interface School {
   id: string;
   code: string; // ej: "ESC-204"
@@ -13,6 +15,8 @@ export interface School {
   lat: number;
   lng: number;
   educational_level: EducationalLevel;
+  /** Gestión estatal o privada. Falta en datos viejos: se muestra como "Sin dato". */
+  management?: SchoolManagement;
   principal_name: string;
   phone: string;
   email: string;
@@ -34,6 +38,9 @@ export interface Camera {
   name: string;
   location_type: CameraLocationType;
   location_detail: string;
+  /** Posición real de la cámara. Falta en datos viejos: no se puede verificar el radio. */
+  lat?: number;
+  lng?: number;
   device_type: CameraDeviceType;
   status: CameraStatus;
   last_heartbeat: string | null;
@@ -144,3 +151,36 @@ export interface DashboardMetrics {
   corridor_meters_covered: number;
 }
 
+
+export type AccessAction =
+  | "login"
+  | "ver_monitoreo_en_vivo"
+  | "ver_camara"
+  | "vincular_celular";
+
+/** Registro inmutable de quién accedió a qué. Lo escribe la app; lo lee solo la administración. */
+export interface AccessLog {
+  id: string;
+  at: string;
+  action: AccessAction;
+  actor_uid: string;
+  actor_email: string;
+  actor_name: string;
+  actor_role: string;
+  camera_id?: string;
+  camera_name?: string;
+  school_name?: string;
+}
+
+/** Marco operativo que define el Municipio. Los campos vacíos se muestran como "Sin definir". */
+export interface OperationalPolicy {
+  id: string;
+  operator_organism: string; // quién opera el sistema
+  data_controller: string; // responsable del tratamiento de las imágenes
+  retention: string; // cuánto se conservan las grabaciones
+  supervision_body: string; // quién supervisa y controla
+  education_coordination: string; // coordinación con autoridades educativas
+  security_coordination: string; // coordinación con seguridad
+  updated_at: string;
+  updated_by: string;
+}

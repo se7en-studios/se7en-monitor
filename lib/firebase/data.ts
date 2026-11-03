@@ -44,6 +44,30 @@ export function useCollection<T extends { id: string }>(
   return { data, loading, error };
 }
 
+/** Suscripción en tiempo real a un documento. `data` es null si no existe. */
+export function useDocument<T extends { id: string }>(col: string, id: string) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(
+    () =>
+      onSnapshot(
+        doc(db, col, id),
+        (snap) => {
+          setData(snap.exists() ? ({ ...snap.data(), id: snap.id } as T) : null);
+          setLoading(false);
+        },
+        (err) => {
+          console.error(`[firestore] ${col}/${id}`, err);
+          setLoading(false);
+        }
+      ),
+    [col, id]
+  );
+
+  return { data, loading };
+}
+
 export const newId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 

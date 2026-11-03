@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
   Maximize2,
@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { Camera } from "@/types/monitor";
 import { StatusBadge } from "@/components/status-badge";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { logAccess } from "@/lib/firebase/audit";
 
 interface CameraFullscreenModalProps {
   camera: Camera | null;
@@ -35,14 +37,26 @@ export function CameraFullscreenModal({ camera, onClose }: CameraFullscreenModal
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
-  const [captured, setCaptured] = useState(false);
+  const { profile } = useAuth();
+
+  // Cada vez que alguien abre una cámara en pantalla completa queda registrado.
+  const cameraId = camera?.id;
+  useEffect(() => {
+    if (!camera || !profile) return;
+    void logAccess(
+      {
+        action: "ver_camara",
+        camera_id: camera.id,
+        camera_name: camera.name,
+        school_name: camera.school_name,
+      },
+      { name: profile.full_name, role: profile.role }
+    );
+    // Solo al abrir o cambiar de cámara, no en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraId, profile?.id]);
 
   if (!camera) return null;
-
-  const handleSnapshot = () => {
-    setCaptured(true);
-    setTimeout(() => setCaptured(false), 2000);
-  };
 
   const handleResetPTZ = () => {
     setZoomLevel(1);
@@ -126,10 +140,6 @@ export function CameraFullscreenModal({ camera, onClose }: CameraFullscreenModal
               <span className="text-muted">BITRATE: 3.8 Mbps (H.264/Opus)</span>
             </div>
 
-            {/* Flash Effect on Snapshot Capture */}
-            {captured && (
-              <div className="absolute inset-0 bg-white/70 animate-in fade-in duration-100 pointer-events-none" />
-            )}
           </div>
         </div>
 
@@ -158,11 +168,12 @@ export function CameraFullscreenModal({ camera, onClose }: CameraFullscreenModal
             </button>
 
             <button
-              onClick={handleSnapshot}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground/85 hover:bg-white/[0.08]"
+              disabled
+              title="Las capturas están deshabilitadas: el sistema transmite en vivo y no guarda imágenes de menores."
+              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-[var(--line)] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-muted opacity-60"
             >
-              <CameraIcon className="h-3.5 w-3.5 text-accent" />
-              <span>{captured ? "¡Capturado!" : "Captura HD"}</span>
+              <CameraIcon className="h-3.5 w-3.5" />
+              <span>Capturas deshabilitadas</span>
             </button>
           </div>
 

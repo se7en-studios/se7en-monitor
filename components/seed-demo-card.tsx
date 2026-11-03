@@ -20,8 +20,8 @@ export function SeedDemoCard() {
       const seeded = await seedDemoData();
       setMessage(
         seeded.length
-          ? `Cargado: ${seeded.join(", ")}.`
-          : "Todas las colecciones ya tenían datos; no se tocó nada."
+          ? `Listo — ${seeded.join(" · ")}.`
+          : "No había nada para cargar ni completar."
       );
     } catch (err) {
       console.error("[seed-demo]", err);
@@ -38,7 +38,7 @@ export function SeedDemoCard() {
         <span>Datos demo de Catriel</span>
       </div>
       <p className="text-xs text-muted">
-        Carga escuelas, cámaras, incidentes, alertas y tickets de ejemplo. Solo completa colecciones vacías.
+        Carga escuelas, cámaras, incidentes, alertas y tickets de ejemplo. Completa colecciones vacías y los campos nuevos de los datos demo ya cargados.
       </p>
       <button
         onClick={onClick}
