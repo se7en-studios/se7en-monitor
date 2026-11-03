@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/firebase/auth-context";
 import {
   byNewest,
   currentActor,
+  currentUid,
   logActivity,
   patchDoc,
   saveDoc,
@@ -68,6 +69,7 @@ export default function IncidentsPage() {
   const { data: incidents, loading } = useCollection<Incident>(
     "incidents",
     sortIncidents,
+    { enabled: canHandle },
   );
   const [term, setTerm] = useState("");
   const [status, setStatus] = useState<IncidentStatus | "open" | "all">("open");
@@ -86,7 +88,7 @@ export default function IncidentsPage() {
   );
 
   const addIncident = async (inc: Incident) => {
-    await saveDoc("incidents", inc);
+    await saveDoc("incidents", { ...inc, reported_by: currentUid() });
     toast.success(`Incidente ${inc.code} reportado`);
     void logActivity({
       event_type: "incident_created",
@@ -119,6 +121,17 @@ export default function IncidentsPage() {
   };
 
   const openCount = incidents.filter((i) => isOpenIncident(i.status)).length;
+
+  if (!canHandle)
+    return (
+      <EmptyState
+        icon={<AlertTriangle className="h-6 w-6" />}
+        title="Los incidentes los ven operadores y administración"
+      >
+        Pueden contener datos personales. Si necesitás verlos, pedile acceso a
+        un Super Admin.
+      </EmptyState>
+    );
 
   return (
     <div className="space-y-6">

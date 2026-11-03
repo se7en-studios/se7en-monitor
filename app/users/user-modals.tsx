@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Loader2, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import type { Profile } from "@/lib/firebase/auth-context";
 import { patchDoc } from "@/lib/firebase/data";
-import { createOperator } from "@/lib/firebase/create-operator";
+import {
+  ProfileWriteError,
+  createOperator,
+} from "@/lib/firebase/create-operator";
 import { ROLE_LABELS, type Role } from "@/lib/roles";
 import { describeError, useToast } from "@/components/toast";
 import { btnPrimary, btnSecondary, input, label } from "@/components/ui";
@@ -33,6 +36,7 @@ export function validateNewOperator(v: NewOperatorInput): string | null {
 }
 
 function createErrorMessage(error: unknown): string {
+  if (error instanceof ProfileWriteError) return error.message;
   const code = (error as { code?: string })?.code ?? "";
   if (code === "auth/email-already-in-use")
     return "Ya existe una cuenta con ese email.";
@@ -189,14 +193,10 @@ export function NewOperatorModal({ onClose }: { onClose: () => void }) {
         <label className={label} htmlFor="nu-pass">
           Contraseña inicial
         </label>
-        <input
+        <PasswordInput
           id="nu-pass"
-          type="text"
-          autoComplete="off"
-          className={input}
-          placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
           value={form.password}
-          onChange={(e) => set({ password: e.target.value })}
+          onChange={(password) => set({ password })}
         />
       </div>
       <div>
@@ -292,5 +292,40 @@ export function EditUserModal({
       )}
       <Actions busy={busy} onClose={onClose} submit="Guardar" />
     </ModalShell>
+  );
+}
+
+/** Contraseña oculta por defecto, con botón para mostrarla y verificar lo escrito. */
+function PasswordInput({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={visible ? "text" : "password"}
+        autoComplete="new-password"
+        className={`${input} pr-10`}
+        placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+        aria-pressed={visible}
+        className="focus-ring absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1.5 text-muted hover:text-foreground"
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
   );
 }

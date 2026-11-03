@@ -2,35 +2,113 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function myProfile() {
-      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
-    }
-    // Usuario autenticado con perfil habilitado (cualquier rol)
+    // Todo lo que no está listado abajo queda denegado (no hay comodín).
+
+    // ---------- Identidad y roles (mantener sincronizado con lib/roles.ts) ----------
+
+    function signedIn() { return request.auth != null; }
+    function profilePath() { return /databases/$(database)/documents/profiles/$(request.auth.uid); }
+    function myProfile() { return get(profilePath()).data; }
+    // Usuario autenticado con perfil habilitado (cualquier rol). Las cuentas anónimas
+    // de los celulares no tienen perfil: nunca son personal.
     function isStaff() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        && myProfile().active == true;
+      return signedIn() && exists(profilePath()) && myProfile().active == true;
     }
-    function hasRole(roles) {
-      return isStaff() && myProfile().role in roles;
-    }
-    // Mantener sincronizado con lib/roles.ts
+    function hasRole(roles) { return isStaff() && myProfile().role in roles; }
     function isAdmin()    { return hasRole(['super_admin', 'municipal_admin']); }
     function isOperator() { return hasRole(['super_admin', 'municipal_admin', 'monitoring_operator']); }
+    // Ver video en vivo: operadores y administración (no técnicos ni solo lectura).
+    function canWatch()   { return isOperator(); }
+    function canMaintain() { return hasRole(['super_admin', 'municipal_admin', 'maintenance_tech']); }
 
-    // Cada usuario lee su propio perfil; solo el Super Admin lista y escribe perfiles.
+    // ---------- Validaciones de forma ----------
+
+    function incoming() { return request.resource.data; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    // Campo opcional: si viene, es texto de hasta `max` caracteres (o null).
+    function optStr(d, key, max) { return !(key in d) || d[key] == null || str(d[key], 0, max); }
+    function isoDate(v) { return v is string && v.size() <= 40 && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}.*'); }
+    function myEmail() { return request.auth.token.email; }
+
+    // ---------- Perfiles ----------
+    // Cada usuario lee su propio perfil; solo el Super Admin lista y escribe perfiles
+    // (nadie puede cambiarse el rol a sí mismo).
     match /profiles/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || hasRole(['super_admin']));
+      allow read: if signedIn() && (request.auth.uid == userId || hasRole(['super_admin']));
       allow write: if hasRole(['super_admin']);
     }
 
-    match /schools/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /cameras/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
-    match /incidents/{id} { allow read: if isStaff(); allow write: if isOperator(); }
-    match /alerts/{id}    { allow read: if isStaff(); allow write: if isOperator(); }
+    // ---------- Infraestructura ----------
+
+    function validSchool(d) {
+      return d.code is string && d.code.matches('^[A-Z0-9-]{1,20}$')
+        && str(d.name, 1, 120) && str(d.address, 1, 200);
+    }
+    match /schools/{id} {
+      allow read: if isStaff();
+      allow create: if isAdmin() && validSchool(incoming());
+      allow update: if isAdmin()
+        && (!changed().hasAny(['code', 'name', 'address']) || validSchool(incoming()));
+      allow delete: if isAdmin();
+    }
+
+    match /cameras/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /alerts/{id}  { allow read: if isStaff(); allow write: if isOperator(); }
+
+    // ---------- Incidentes (texto libre: pueden tener datos personales) ----------
+
+    function validIncident(d, id) {
+      return d.keys().hasOnly(['id', 'code', 'school_id', 'school_name', 'camera_id', 'camera_name',
+          'type', 'title', 'description', 'priority', 'status', 'assigned_to', 'reported_at',
+          'reported_by', 'resolved_at', 'notes'])
+        && d.id == id
+        && d.reported_by == request.auth.uid
+        && isoDate(d.reported_at)
+        && str(d.code, 1, 40) && str(d.school_id, 1, 100)
+        && str(d.title, 1, 200) && str(d.description, 0, 2000)
+        && d.type in ['perimetro_vulnerable', 'persona_sospechosa', 'aglomeracion_no_habitual',
+          'corte_suministro', 'obstruccion_camara', 'accidente_transito_escolar', 'alarma_vecinal']
+        && d.priority in ['baja', 'media', 'alta', 'critica']
+        && d.status in ['nuevo', 'en_revision', 'en_proceso', 'resuelto', 'cerrado']
+        && optStr(d, 'school_name', 200) && optStr(d, 'camera_id', 100) && optStr(d, 'camera_name', 200)
+        && optStr(d, 'assigned_to', 200) && optStr(d, 'notes', 2000);
+    }
+    match /incidents/{id} {
+      allow read: if isOperator();
+      allow create: if isOperator() && validIncident(incoming(), id);
+      // Solo seguimiento: estado, notas, responsable y quién/cuándo.
+      allow update: if isOperator()
+        && changed().hasOnly(['status', 'notes', 'resolved_at', 'updated_at', 'updated_by', 'assigned_to'])
+        && incoming().status in ['nuevo', 'en_revision', 'en_proceso', 'resuelto', 'cerrado']
+        && (!changed().hasAny(['updated_by']) || incoming().updated_by == myEmail())
+        && optStr(incoming(), 'notes', 2000) && optStr(incoming(), 'assigned_to', 200);
+      allow delete: if false;
+    }
+
+    // ---------- Mantenimiento ----------
+
+    function validTicket(d, id) {
+      return d.keys().hasOnly(['id', 'code', 'school_id', 'school_name', 'camera_id', 'camera_name',
+          'technician', 'title', 'priority', 'status', 'scheduled_for', 'created_at', 'reported_by', 'notes'])
+        && d.id == id
+        && d.reported_by == request.auth.uid
+        && isoDate(d.created_at)
+        && str(d.code, 1, 40) && str(d.title, 1, 200) && str(d.technician, 1, 120)
+        && str(d.scheduled_for, 1, 40)
+        && d.priority in ['normal', 'urgente']
+        && d.status in ['pendiente', 'en_curso', 'completado']
+        && optStr(d, 'notes', 2000);
+    }
     match /maintenance_tickets/{id} {
       allow read: if isStaff();
-      allow write: if hasRole(['super_admin', 'municipal_admin', 'maintenance_tech']);
+      allow create: if canMaintain() && validTicket(incoming(), id);
+      allow update: if canMaintain()
+        && changed().hasOnly(['status', 'notes', 'updated_at', 'updated_by', 'technician', 'scheduled_for'])
+        && incoming().status in ['pendiente', 'en_curso', 'completado']
+        && (!changed().hasAny(['updated_by']) || incoming().updated_by == myEmail())
+        && optStr(incoming(), 'notes', 2000);
+      allow delete: if false;
     }
 
     // Marco operativo que define el Municipio: lo lee todo el personal, lo edita el Super Admin.
@@ -39,38 +117,122 @@ service cloud.firestore {
       allow write: if hasRole(['super_admin']);
     }
 
-    // Quién accedió a qué: cada persona solo puede registrar sus propios accesos,
-    // lo lee la administración y nadie lo modifica ni lo borra.
+    // ---------- Bitácoras inmutables ----------
+    // La identidad sale del perfil verificado y la fecha del servidor (serverTimestamp()):
+    // nadie puede registrar en nombre de otro ni inventar la hora.
+
+    function verifiedActor(d) {
+      return d.actor_uid == request.auth.uid
+        && d.actor_email == myEmail()
+        && d.actor_name == myProfile().full_name
+        && d.actor_role == myProfile().role;
+    }
     match /access_logs/{id} {
-      allow create: if isStaff() && request.resource.data.actor_uid == request.auth.uid;
+      allow create: if isStaff()
+        && incoming().keys().hasOnly(['at', 'action', 'actor_uid', 'actor_email', 'actor_name', 'actor_role',
+          'camera_id', 'camera_name', 'school_name'])
+        && verifiedActor(incoming())
+        && incoming().at == request.time
+        && incoming().action in ['login', 'ver_monitoreo_en_vivo', 'ver_camara', 'vincular_celular']
+        && optStr(incoming(), 'camera_id', 100) && optStr(incoming(), 'camera_name', 200)
+        && optStr(incoming(), 'school_name', 200);
       allow read: if isAdmin();
       allow update, delete: if false;
     }
 
-    // Bitácora inmutable
     match /activity_logs/{id} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create: if isStaff()
+        && incoming().keys().hasOnly(['event_type', 'title', 'description', 'entity_type', 'entity_id',
+          'actor', 'actor_uid', 'timestamp'])
+        && incoming().actor_uid == request.auth.uid
+        && incoming().actor == myEmail()
+        && incoming().timestamp == request.time
+        && incoming().event_type in ['camera_connected', 'camera_disconnected', 'incident_created',
+          'incident_resolved', 'school_registered', 'device_paired', 'maintenance_completed']
+        && incoming().entity_type in ['camera', 'school', 'incident', 'maintenance']
+        && str(incoming().title, 1, 200) && str(incoming().description, 0, 500)
+        && optStr(incoming(), 'entity_id', 100);
       allow update, delete: if false;
     }
 
-    // Vinculación de celulares. El token (UUID impredecible) es el id del documento y
-    // es la credencial del celular, que transmite sin login. Solo la administración
-    // los crea y los revoca; vencen solos (expires_at).
+    // ---------- Vinculación de celulares ----------
+    // El token (128 bits al azar) es el id del documento. Lo crea y lo revoca la
+    // administración. El celular inicia sesión anónima y lo «reclama» una sola vez:
+    // desde ahí el enlace queda atado a ese dispositivo (device_uid). Conocer el id
+    // permite leerlo (get), pero nadie fuera de la administración puede listarlos.
     match /pairings/{token} {
-      allow read, write: if isAdmin();
+      allow get: if signedIn();
+      allow list, create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        signedIn()
+        && resource.data.device_uid == null
+        && resource.data.expires_at > request.time
+        && changed().hasOnly(['device_uid', 'claimed_at'])
+        && incoming().device_uid == request.auth.uid
+        && incoming().claimed_at == request.time
+      );
     }
 
-    // Señalización WebRTC: solo se acepta para sesiones cuyo token tiene una vinculación
-    // vigente. Se permite leer un documento por id, pero no listar sesiones. Sin `get()`
-    // sobre una vinculación inexistente o vencida, la regla falla y se deniega.
-    function pairingValid(token) {
-      return get(/databases/$(database)/documents/pairings/$(token)).data.expires_at > request.time;
+    // ¿El usuario es el celular que reclamó un enlace vigente de esta cámara?
+    function ownsPairing(token, cameraId) {
+      let p = get(/databases/$(database)/documents/pairings/$(token)).data;
+      return signedIn()
+        && p.camera_id == cameraId
+        && p.device_uid == request.auth.uid
+        && p.expires_at > request.time;
     }
-    match /camera_sessions/{sessionId} {
-      allow get, create, update, delete: if pairingValid(sessionId);
-      match /callerCandidates/{id} { allow read, write: if pairingValid(sessionId); }
-      match /calleeCandidates/{id} { allow read, write: if pairingValid(sessionId); }
+    function sessionDevice(cameraId) {
+      let s = get(/databases/$(database)/documents/camera_sessions/$(cameraId)).data;
+      return s.device_uid == request.auth.uid && ownsPairing(s.pairing, cameraId);
+    }
+    function sdpOk(d, key) {
+      return !(key in d) || d[key] == null
+        || (d[key].keys().hasOnly(['type', 'sdp']) && str(d[key].sdp, 1, 19999) && d[key].type is string);
+    }
+
+    function validCandidate(d) {
+      return d.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment', 'round'])
+        && str(d.candidate, 0, 999) && str(d.round, 1, 64)
+        && optStr(d, 'sdpMid', 64) && optStr(d, 'usernameFragment', 256);
+    }
+
+    // Señalización WebRTC, una sesión por cámara. El celular publica la oferta; solo
+    // quien puede ver en vivo responde. Nadie lista sesiones.
+    match /camera_sessions/{cameraId} {
+      allow get: if canWatch()
+        || (resource.data.device_uid == request.auth.uid && ownsPairing(resource.data.pairing, cameraId));
+      allow create, update: if (
+          incoming().keys().hasOnly(['pairing', 'device_uid', 'expires_at', 'offer', 'round', 'viewer_request',
+            'status', 'updatedAt', 'answer', 'answer_round', 'viewer_uid', 'connectedAt'])
+          && incoming().device_uid == request.auth.uid
+          && ownsPairing(incoming().pairing, cameraId)
+          && incoming().expires_at == get(/databases/$(database)/documents/pairings/$(incoming().pairing)).data.expires_at
+          && incoming().status in ['idle', 'waiting_for_viewer', 'terminated', 'connected']
+          && sdpOk(incoming(), 'offer') && optStr(incoming(), 'round', 64) && optStr(incoming(), 'viewer_request', 64)
+        ) || (
+          request.method == 'update' && canWatch()
+          && changed().hasOnly(['viewer_request', 'answer', 'answer_round', 'status', 'viewer_uid',
+            'connectedAt', 'updatedAt'])
+          && (!changed().hasAny(['viewer_uid']) || incoming().viewer_uid == request.auth.uid)
+          && (!changed().hasAny(['status']) || incoming().status == 'connected')
+          && sdpOk(incoming(), 'answer') && optStr(incoming(), 'answer_round', 64)
+          && optStr(incoming(), 'viewer_request', 64)
+        );
+      // Revocar o generar un enlace nuevo borra la sesión: el tablero corta la conexión.
+      allow delete: if isAdmin();
+
+
+      match /callerCandidates/{id} {
+        allow read: if canWatch() || sessionDevice(cameraId);
+        allow create: if sessionDevice(cameraId) && validCandidate(incoming());
+        allow delete: if sessionDevice(cameraId);
+      }
+      match /calleeCandidates/{id} {
+        allow read: if canWatch() || sessionDevice(cameraId);
+        allow create: if canWatch() && validCandidate(incoming());
+        allow delete: if canWatch();
+      }
     }
   }
 }

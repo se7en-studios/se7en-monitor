@@ -109,14 +109,15 @@ npm run dev
 
 ## 5. Prueba de la Funcionalidad Celular a Computadora
 
-1. En la computadora, hacer clic en el botón superior **"Conectar Celular"** o ir a la sección **Cámaras**.
-2. Se desplegará un **Código QR** y un enlace temporal con token seguro.
-3. Abrir el enlace o escanear el QR desde el teléfono móvil conectado a la misma red WiFi o con datos móviles.
+1. Un administrador va a **Cámaras** → **Vincular celular** y genera el enlace (vale 3 días; generar uno nuevo revoca el anterior).
+2. Se muestra un **código QR** con el enlace. El token solo vive en el QR y en `pairings` (que solo lee la administración).
+3. Escanear el QR **con el celular que va a transmitir**: inicia una sesión anónima y el enlace queda atado a ese dispositivo (otro celular ya no puede usarlo). No abrir el enlace en la computadora.
 4. En el celular se abrirá la consola móvil:
    - Aceptar permisos de cámara.
    - Seleccionar cámara trasera o frontal.
    - Pulsar **INICIAR TRANSMISIÓN AL DASHBOARD**.
-5. En la computadora, ingresar a **Monitoreo en vivo** (`/monitor/live`) para visualizar el dispositivo móvil en la grilla.
+5. En la computadora, un operador o administrador entra a **Monitoreo en vivo** (`/monitor/live`). Técnicos y cuentas de solo lectura no ven video.
+6. **Revocar enlace** (en Cámaras) borra el enlace y la sesión: el tablero corta la conexión y el celular avisa que el enlace ya no sirve.
 
 ---
 
@@ -129,8 +130,13 @@ npm run dev
 
 ## 7. Puesta en marcha de Auth + Firestore
 
-1. Firebase Console → Authentication → habilitar **Correo electrónico/contraseña**.
-2. Desplegar reglas: `firebase deploy --only firestore:rules` (o pegar `firestore.rules` en la consola).
+1. Firebase Console → Authentication → Método de acceso → habilitar **Correo electrónico/contraseña** y **Anónimo** (lo usan los celulares para reclamar su enlace de vinculación).
+2. Desplegar reglas desde la raíz del repo (`firebase.json` y `.firebaserc` ya apuntan a `monitoreo-camaras-977a6` y a `firestore.rules`):
+   ```powershell
+   npx firebase login
+   npx firebase deploy --only firestore:rules
+   ```
+   Las reglas se prueban con el emulador (requiere Java 21+): `npm run test:rules`. Las pruebas unitarias sin emulador: `npm test`.
 3. Cuenta de servicio (Configuración del proyecto → Cuentas de servicio → Generar clave), guardada **fuera del repo**.
 4. Crear el primer Super Admin y cargar datos demo:
    ```powershell

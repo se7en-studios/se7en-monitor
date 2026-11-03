@@ -10,6 +10,7 @@ import {
   Video,
 } from "lucide-react";
 import type { Camera, School } from "@/types/monitor";
+import type { PairingInfo } from "@/lib/firebase/pairing";
 import { cameraCoverage, distanceMeters } from "@/lib/geo";
 import { DEVICE_LABELS, LOCATION_LABELS } from "@/lib/camera-labels";
 import { StatusBadge } from "@/components/status-badge";
@@ -19,8 +20,10 @@ interface CameraRowProps {
   camera: Camera;
   school: School | undefined;
   canEdit: boolean;
-  /** Vencimiento del enlace, si el rol puede verlo y el enlace existe. */
-  pairingExpires: Date | undefined;
+  /** Puede ver video en vivo (operadores y administración). */
+  canWatch: boolean;
+  /** Enlace vigente más reciente (solo lo ve la administración). */
+  pairing: PairingInfo | undefined;
   busy: boolean;
   onEdit: () => void;
   onRevoke: () => void;
@@ -52,23 +55,23 @@ function CoverageCell({
 function PairingCell({
   camera,
   canEdit,
-  expires,
+  pairing,
 }: {
   camera: Camera;
   canEdit: boolean;
-  expires: Date | undefined;
+  pairing: PairingInfo | undefined;
 }) {
   if (camera.device_type !== "mobile_webrtc")
     return <span className="text-muted">—</span>;
-  if (!camera.publish_token)
-    return <span className="text-muted">Sin enlace</span>;
-  // Solo la administración puede leer los enlaces: el resto ve que existe uno.
-  if (!canEdit) return <span className="text-foreground/85">Vinculado</span>;
-  if (!expires || expires.getTime() < Date.now())
+  // Solo la administración puede leer los enlaces (ver firestore.rules).
+  if (!canEdit) return <span className="text-muted">Solo administración</span>;
+  if (!pairing) return <span className="text-muted">Sin enlace</span>;
+  if (pairing.expiresAt.getTime() < Date.now())
     return <span className="text-amber-300">Enlace vencido</span>;
   return (
     <span className="text-emerald-300">
-      Vigente hasta {expires.toLocaleDateString("es-AR")}
+      {pairing.claimed ? "En uso" : "Sin abrir"} · vence el{" "}
+      {pairing.expiresAt.toLocaleDateString("es-AR")}
     </span>
   );
 }
@@ -77,7 +80,8 @@ export function CameraRow({
   camera: cam,
   school,
   canEdit,
-  pairingExpires,
+  canWatch,
+  pairing,
   busy,
   onEdit,
   onRevoke,
@@ -123,13 +127,15 @@ export function CameraRow({
           : "Todavía no transmitió"}
       </td>
       <td className="px-4 py-3 text-[12px]">
-        <PairingCell camera={cam} canEdit={canEdit} expires={pairingExpires} />
+        <PairingCell camera={cam} canEdit={canEdit} pairing={pairing} />
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1">
-          <IconLink href={`/monitor/live?cam=${cam.id}`} label="Ver en vivo">
-            <Video className="h-4 w-4" />
-          </IconLink>
+          {canWatch && (
+            <IconLink href={`/monitor/live?cam=${cam.id}`} label="Ver en vivo">
+              <Video className="h-4 w-4" />
+            </IconLink>
+          )}
           {canEdit && (
             <>
               <IconButton
@@ -139,7 +145,7 @@ export function CameraRow({
               >
                 <Pencil className="h-4 w-4" />
               </IconButton>
-              {isMobile && cam.publish_token && (
+              {isMobile && pairing && (
                 <IconButton
                   label="Revocar enlace"
                   onClick={onRevoke}

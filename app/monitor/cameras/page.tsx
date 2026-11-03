@@ -7,7 +7,7 @@ import { logActivity, saveDoc, useCollection } from "@/lib/firebase/data";
 import {
   removeCamera,
   revokeCameraPairing,
-  usePairingExpirations,
+  usePairingsByCamera,
 } from "@/lib/firebase/pairing";
 import { can } from "@/lib/roles";
 import { CAMERA_STATUS_LABELS } from "@/lib/camera-labels";
@@ -36,7 +36,8 @@ export default function CamerasManagerPage() {
   const canEdit = can.editInfrastructure(profile?.role);
   const { data: cameras, loading } = useCollection<Camera>("cameras");
   const { data: schools } = useCollection<School>("schools");
-  const expirations = usePairingExpirations(canEdit);
+  const canWatch = can.watchLive(profile?.role);
+  const pairings = usePairingsByCamera(canEdit);
   const [term, setTerm] = useState("");
   const [schoolId, setSchoolId] = useState("all");
   const [status, setStatus] = useState<CameraStatus | "all">("all");
@@ -204,11 +205,8 @@ export default function CamerasManagerPage() {
                   camera={cam}
                   school={schools.find((s) => s.id === cam.school_id)}
                   canEdit={canEdit}
-                  pairingExpires={
-                    cam.publish_token
-                      ? expirations.get(cam.publish_token)
-                      : undefined
-                  }
+                  canWatch={canWatch}
+                  pairing={pairings.get(cam.id)}
                   busy={busyId === cam.id}
                   onEdit={() => setEditing(cam)}
                   onRevoke={() => setPending({ kind: "revoke", camera: cam })}
@@ -236,7 +234,7 @@ export default function CamerasManagerPage() {
         onConfirm={() => void confirmPending()}
       >
         {pending?.kind === "delete"
-          ? `«${pending.camera.name}» deja de aparecer en el monitoreo${pending.camera.publish_token ? " y su enlace de celular se anula" : ""}. No se puede deshacer.`
+          ? `«${pending.camera.name}» deja de aparecer en el monitoreo${pairings.has(pending.camera.id) ? " y su enlace de celular se anula" : ""}. No se puede deshacer.`
           : "El celular deja de poder transmitir. Para volver a usarlo hay que generar un enlace nuevo."}
       </ConfirmDialog>
 

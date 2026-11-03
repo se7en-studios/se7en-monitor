@@ -31,7 +31,8 @@ export const can = {
   viewAudit: (r?: Role) => !!r && ADMINS.includes(r),
   editPolicy: (r?: Role) => r === "super_admin",
   editInfrastructure: (r?: Role) => !!r && ADMINS.includes(r), // escuelas y cámaras
-  handleIncidents: (r?: Role) => !!r && OPERATORS.includes(r), // incidentes y alertas
+  handleIncidents: (r?: Role) => !!r && OPERATORS.includes(r), // incidentes (ver y manejar) y alertas
+  watchLive: (r?: Role) => !!r && OPERATORS.includes(r), // video en vivo: canWatch() en las reglas
   handleMaintenance: (r?: Role) =>
     !!r && (ADMINS.includes(r) || r === "maintenance_tech"),
 };

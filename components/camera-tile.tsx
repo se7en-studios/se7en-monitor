@@ -53,7 +53,7 @@ export function CameraTile({
 
       {isMobile ? (
         <WebRTCReceiverTile
-          token={camera.publish_token ?? ""}
+          cameraId={camera.id}
           onStatusChange={setReceiver}
           onOpenPairModal={onOpenPairModal}
         />

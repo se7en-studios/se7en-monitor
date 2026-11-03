@@ -5,12 +5,13 @@ import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
+  Lock,
   Shield,
   Smartphone,
   Video,
 } from "lucide-react";
 import { useCollection } from "@/lib/firebase/data";
-import { useAuth } from "@/lib/firebase/auth-context";
+import { useAuth, type Profile } from "@/lib/firebase/auth-context";
 import { logAccess } from "@/lib/firebase/audit";
 import { can } from "@/lib/roles";
 import { CameraTile } from "@/components/camera-tile";
@@ -47,6 +48,31 @@ const sortForLive = (a: Camera, b: Camera) =>
 
 export default function LiveMonitoringPage() {
   const { profile } = useAuth();
+  if (!can.watchLive(profile?.role)) return <NoLiveAccess />;
+  return <LiveGrid profile={profile} />;
+}
+
+/** Técnicos y solo lectura no ven video en vivo (las reglas tampoco se lo permiten). */
+function NoLiveAccess() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Corredor escolar"
+        title="Monitoreo en"
+        accent="vivo"
+      />
+      <EmptyState
+        icon={<Lock className="h-6 w-6" />}
+        title="Tu rol no puede ver video en vivo"
+      >
+        El video de las cámaras solo lo ven los operadores de monitoreo y la
+        administración. Si necesitás acceso, pedíselo a un Super Admin.
+      </EmptyState>
+    </div>
+  );
+}
+
+function LiveGrid({ profile }: { profile: Profile | null }) {
   const canPair = can.editInfrastructure(profile?.role);
   const { data: cameras, loading } = useCollection<Camera>(
     "cameras",
@@ -272,7 +298,8 @@ function useExpandedAccessLog(camera: Camera | null, profile: Who) {
 /** `/monitor/live?cam=<id>` (desde Cámaras) abre esa cámara ampliada. */
 function useInitialCameraFromUrl(setExpandedId: (id: string) => void) {
   useEffect(() => {
-    const cam = new URLSearchParams(window.location.search).get("cam");
+    const params = new URLSearchParams(window.location.search);
+    const cam = params.get("cam") ?? params.get("focus");
     if (cam) setExpandedId(cam);
   }, [setExpandedId]);
 }

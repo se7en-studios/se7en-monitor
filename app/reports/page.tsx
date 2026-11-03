@@ -17,7 +17,12 @@ export default function ReportsPage() {
   const { profile } = useAuth();
   const { data: schools, loading: l1 } = useCollection<School>("schools");
   const { data: cameras, loading: l2 } = useCollection<Camera>("cameras");
-  const { data: incidents, loading: l3 } = useCollection<Incident>("incidents");
+  const canIncidents = can.handleIncidents(profile?.role);
+  const { data: incidents, loading: l3 } = useCollection<Incident>(
+    "incidents",
+    undefined,
+    { enabled: canIncidents },
+  );
   const [selected, setSelected] = useState<ReportKind | null>(null);
   const loading = l1 || l2 || l3;
 
@@ -34,7 +39,7 @@ export default function ReportsPage() {
     },
     {
       kind: "availability",
-      figures: `${online} de ${cameras.length} cámaras en línea · ${open} incidentes abiertos`,
+      figures: `${online} de ${cameras.length} cámaras en línea${canIncidents ? ` · ${open} incidentes abiertos` : ""}`,
       allowed: true,
     },
     {

@@ -91,7 +91,9 @@ export function navFor(role?: Role): NavGroup[] {
     items: g.items.filter(
       (i) =>
         (i.href !== "/users" || can.manageUsers(role)) &&
-        (i.href !== "/audit" || can.viewAudit(role)),
+        (i.href !== "/audit" || can.viewAudit(role)) &&
+        (i.href !== "/incidents" || can.handleIncidents(role)) &&
+        (i.href !== "/monitor/live" || can.watchLive(role)),
     ),
   })).filter((g) => g.items.length > 0);
 }
@@ -110,7 +112,9 @@ const RULE = (
 function RailNav({ expanded }: { expanded: boolean }) {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
-  const { data: incidents } = useCollection<Incident>("incidents");
+  const { data: incidents } = useCollection<Incident>("incidents", undefined, {
+    enabled: can.handleIncidents(profile?.role),
+  });
   const openIncidents = incidents.filter(
     (i) => !CLOSED_STATES.includes(i.status),
   ).length;

@@ -27,6 +27,8 @@ import {
   btnSecondary,
 } from "@/components/ui";
 import { useCollection, byId, byNewest } from "@/lib/firebase/data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { can } from "@/lib/roles";
 import { computeMetrics } from "@/lib/metrics";
 import type {
   ActivityEvent,
@@ -37,6 +39,9 @@ import type {
 
 const sortActivity = byNewest("timestamp");
 const CAMERAS_SHOWN = 5;
+// ponytail: Firestore ordena los textos ISO viejos antes que los Timestamp nuevos; con pocos
+// registros viejos alcanza este margen. Si crecen, migrar 	imestamp viejos a Timestamp.
+const ACTIVITY_QUERY = { orderByField: "timestamp", limit: 50 };
 
 export default function DashboardPage() {
   const { data: schools, loading: loadingSchools } =
@@ -45,10 +50,13 @@ export default function DashboardPage() {
     "cameras",
     byId,
   );
+  const { profile } = useAuth();
   const { data: incidents, loading: loadingIncidents } =
-    useCollection<Incident>("incidents");
+    useCollection<Incident>("incidents", undefined, {
+      enabled: can.handleIncidents(profile?.role),
+    });
   const { data: activity, loading: loadingActivity } =
-    useCollection<ActivityEvent>("activity_logs", sortActivity);
+    useCollection<ActivityEvent>("activity_logs", sortActivity, ACTIVITY_QUERY);
   const metrics = computeMetrics(schools, cameras, incidents);
   const loadingMetrics = loadingSchools || loadingCameras || loadingIncidents;
 
@@ -221,12 +229,12 @@ function PriorityCameras({
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <div className="hidden text-right font-mono text-[11px] text-muted sm:block">
+              {/* Resolución configurada al dar de alta; los FPS no se miden, no se muestran. */}
               <p className="text-foreground/85">{cam.resolution}</p>
-              <p>{cam.fps} FPS</p>
             </div>
             <StatusBadge status={cam.status} size="sm" />
             <Link
-              href={`/monitor/live?focus=${cam.id}`}
+              href={`/monitor/live?cam=${cam.id}`}
               aria-label={`Ver ${cam.name} en vivo`}
               title="Ver en vivo"
               className="focus-ring rounded-full p-1.5 text-muted transition-colors hover:bg-white/[0.06] hover:text-foreground"
