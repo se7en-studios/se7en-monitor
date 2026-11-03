@@ -13,6 +13,69 @@ interface InteractiveMapProps {
   showCameras: boolean;
 }
 
+const CATRIEL: L.LatLngTuple = [-37.8812, -67.7955];
+
+// Íconos (lucide) dentro de los pines. Cada estado tiene su forma (en globals.css) y su glifo.
+const SVG = (path: string, size = 13) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+const GLYPH: Record<Camera["status"], string> = {
+  online: SVG('<path d="M20 6 9 17l-5-5"/>'),
+  alerta: SVG('<path d="M12 8v5"/><path d="M12 16.5h.01"/>'),
+  mantenimiento: SVG(
+    '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+    12,
+  ),
+  offline: SVG('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+};
+const STATUS_LABEL: Record<Camera["status"], string> = {
+  online: "en línea",
+  alerta: "en alerta",
+  mantenimiento: "en mantenimiento",
+  offline: "sin señal",
+};
+const SCHOOL_GLYPH = SVG(
+  '<path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-4 0v4"/><path d="M18 5v17"/><path d="M6 5v17"/>',
+  17,
+);
+
+const escapeHtml = (s: string) =>
+  s.replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        ch
+      ] ?? ch,
+  );
+
+/** Los colores de Leaflet (círculos) salen de los tokens de globals.css. */
+const token = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function schoolIcon(school: School, selected: boolean) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="map-pin map-pin--school${selected ? " map-pin--selected" : ""}" style="width:36px;height:36px">
+      <div class="map-pin__body">${SCHOOL_GLYPH}</div>
+      <div class="map-pin__code">${escapeHtml(school.code)}</div>
+    </div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+}
+
+function cameraIcon(cam: Camera, selected: boolean) {
+  const mobile = cam.device_type === "mobile_webrtc";
+  return L.divIcon({
+    className: "",
+    html: `<div class="map-pin map-pin--${cam.status}${selected ? " map-pin--selected" : ""}" style="width:24px;height:24px">
+      <div class="map-pin__body">${GLYPH[cam.status] ?? GLYPH.offline}</div>
+      ${mobile ? '<span class="map-pin__mobile"></span>' : ""}
+    </div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
 export function InteractiveMap({
   schools,
   cameras,
@@ -26,148 +89,123 @@ export function InteractiveMap({
   const circlesLayerRef = useRef<L.LayerGroup | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
 
-  // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Center on Catriel, Río Negro
     const map = L.map(mapContainerRef.current, {
-      center: [-37.8812, -67.7955],
+      center: CATRIEL,
       zoom: 15,
       zoomControl: false,
     });
-
-    // Dark Matter tiles for institutional GIS look
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {
         attribution:
-          '&copy; <a href="https://carto.com/">CARTO</a> | Municipio de Catriel',
+          '&copy; <a href="https://carto.com/">CARTO</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         subdomains: "abcd",
         maxZoom: 19,
-      }
+      },
     ).addTo(map);
-
-    L.control.zoom({ position: "topright" }).addTo(map);
+    L.control
+      .zoom({
+        position: "topright",
+        zoomInTitle: "Acercar",
+        zoomOutTitle: "Alejar",
+      })
+      .addTo(map);
 
     circlesLayerRef.current = L.layerGroup().addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
 
+    // El contenedor cambia de tamaño con la barra lateral y el cajón: Leaflet tiene que enterarse.
+    const resize = new ResizeObserver(() => map.invalidateSize());
+    resize.observe(mapContainerRef.current);
+
     return () => {
+      resize.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
 
-  // Update Layers (Circles & Markers)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !circlesLayerRef.current || !markersLayerRef.current) return;
+    const circles = circlesLayerRef.current;
+    const markers = markersLayerRef.current;
+    if (!map || !circles || !markers) return;
 
-    circlesLayerRef.current.clearLayers();
-    markersLayerRef.current.clearLayers();
+    circles.clearLayers();
+    markers.clearLayers();
+    const accent = token("--accent");
+    const warn = token("--warn");
 
-    // 1. Draw 200m circular perimeters
     if (showRadius) {
       schools.forEach((sch) => {
-        const circle = L.circle([sch.lat, sch.lng], {
-          radius: sch.perimeter_radius_meters, // Exactly 200m
-          color: sch.status === "operativo" ? "#38bdf8" : "#f59e0b",
-          weight: 2,
+        L.circle([sch.lat, sch.lng], {
+          radius: sch.perimeter_radius_meters,
+          color: sch.status === "operativo" ? accent : warn,
+          weight: 1.5,
           dashArray: "6, 6",
-          fillColor: "#2563eb",
-          fillOpacity: 0.14,
-        });
-
-        circle.bindTooltip(
-          `<strong>${sch.name}</strong><br/>Radio protegido: ${sch.perimeter_radius_meters} metros`,
-          { className: "leaflet-dark-tooltip", sticky: true }
-        );
-
-        circlesLayerRef.current?.addLayer(circle);
+          fillColor: accent,
+          fillOpacity: 0.1,
+        })
+          .bindTooltip(
+            `<strong>${escapeHtml(sch.name)}</strong><br/>Radio protegido: ${sch.perimeter_radius_meters} m`,
+            { className: "leaflet-dark-tooltip", sticky: true },
+          )
+          .addTo(circles);
       });
     }
 
-    // 2. Draw School Pins
     schools.forEach((sch) => {
-      const isSelected = selectedEntity && "code" in selectedEntity && selectedEntity.id === sch.id;
-
-      const schoolIcon = L.divIcon({
-        className: "custom-school-icon",
-        html: `
- <div class="relative flex items-center justify-center">
- <div class="h-9 w-9 rounded-full ${
- isSelected ?"bg-accent ring-4 ring-accent/50 scale-110" :"bg-accent"
- } text-background flex items-center justify-center border-2 border-white transition-all cursor-pointer">
- <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/></svg>
- </div>
- <div class="absolute -bottom-5 whitespace-nowrap bg-panel text-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-[var(--line-strong)] shadow">
- ${sch.code}
- </div>
- </div>
-`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
-
-      const marker = L.marker([sch.lat, sch.lng], { icon: schoolIcon });
-      marker.on("click", () => {
-        onSelectEntity(sch);
-        map.panTo([sch.lat, sch.lng], { animate: true });
-      });
-
-      markersLayerRef.current?.addLayer(marker);
+      const selected =
+        !!selectedEntity &&
+        "code" in selectedEntity &&
+        selectedEntity.id === sch.id;
+      L.marker([sch.lat, sch.lng], {
+        icon: schoolIcon(sch, selected),
+        title: sch.name,
+        alt: `Escuela ${sch.name}`,
+        keyboard: true,
+      })
+        .on("click", () => {
+          onSelectEntity(sch);
+          map.panTo([sch.lat, sch.lng], { animate: true });
+        })
+        .addTo(markers);
     });
 
-    // 3. Draw Camera Pins
     if (showCameras) {
       cameras.forEach((cam, index) => {
-        // Place cameras geographically spaced around their associated school
-        const targetSchool = schools.find((s) => s.id === cam.school_id) || schools[0];
+        const school =
+          schools.find((s) => s.id === cam.school_id) ?? schools[0];
+        if (cam.lat == null && !school) return;
         // Posición real si la cámara la tiene; en datos viejos, repartida alrededor de la escuela.
-        const camLat = cam.lat ?? targetSchool.lat + ((index % 3) - 1) * 0.0011;
-        const camLng = cam.lng ?? targetSchool.lng + (((index + 1) % 3) - 1) * 0.0013;
-
-        const isMobile = cam.device_type === "mobile_webrtc";
-        const color =
-          cam.status === "online"
-            ? "bg-emerald-500"
-            : cam.status === "alerta"
-            ? "bg-amber-500"
-            : "bg-rose-500";
-
-        const camIcon = L.divIcon({
-          className: "custom-cam-icon",
-          html: `
- <div class="relative flex items-center justify-center cursor-pointer group">
- <div class="h-6 w-6 rounded-full ${color} ${
- isMobile ?"animate-pulse ring-2 ring-accent/50" :""
- } text-background font-bold flex items-center justify-center border border-black/40">
- <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.75 12h3.25a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h3.25"/><path d="m10 6 2-2 2 2"/><path d="M12 4v8"/></svg>
- </div>
- </div>
-`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        });
-
-        const camMarker = L.marker([camLat, camLng], { icon: camIcon });
-        camMarker.on("click", () => {
-          onSelectEntity(cam);
-        });
-
-        markersLayerRef.current?.addLayer(camMarker);
+        const lat = cam.lat ?? school.lat + ((index % 3) - 1) * 0.0011;
+        const lng = cam.lng ?? school.lng + (((index + 1) % 3) - 1) * 0.0013;
+        const selected =
+          !!selectedEntity &&
+          !("code" in selectedEntity) &&
+          selectedEntity.id === cam.id;
+        L.marker([lat, lng], {
+          icon: cameraIcon(cam, selected),
+          title: `${cam.name} · ${STATUS_LABEL[cam.status] ?? cam.status}`,
+          alt: `Cámara ${cam.name}, ${STATUS_LABEL[cam.status] ?? cam.status}`,
+          keyboard: true,
+        })
+          .on("click", () => onSelectEntity(cam))
+          .addTo(markers);
       });
     }
-  }, [schools, cameras, showRadius, showCameras, selectedEntity, onSelectEntity]);
+  }, [
+    schools,
+    cameras,
+    showRadius,
+    showCameras,
+    selectedEntity,
+    onSelectEntity,
+  ]);
 
-  return (
-    <div
-      ref={mapContainerRef}
-      className="h-full w-full rounded-2xl overflow-hidden"
-      style={{ background: "#080c14" }}
-    />
-  );
+  return <div ref={mapContainerRef} className="h-full w-full bg-background" />;
 }
-
