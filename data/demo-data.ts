@@ -254,7 +254,6 @@ const RAW_CAMERAS: Camera[] = [
     fps: 30,
     battery_level: 89,
     is_live: false,
-    publish_token: "demo-mobile-token-se7en",
     installed_at: "2026-11-02",
   },
 ];

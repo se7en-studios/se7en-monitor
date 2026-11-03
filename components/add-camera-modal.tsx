@@ -113,6 +113,7 @@ export function AddCameraModal({ isOpen, onClose, onAddCamera }: AddCameraModalP
                 onChange={(e) => setDeviceType(e.target.value as CameraDeviceType)}
                 className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
               >
+                <option value="mobile_webrtc">Celular (WebRTC)</option>
                 <option value="ip_dome">IP Domo Antivandálico</option>
                 <option value="ptz_exterior">Domo PTZ 360°</option>
                 <option value="ip_bullet">Bullet Perimetral Exterior</option>

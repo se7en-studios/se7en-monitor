@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCollection, saveDoc, removeDoc, logActivity } from "@/lib/firebase/data";
+import { revokePairing } from "@/lib/firebase/pairing";
 import { can } from "@/lib/roles";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
@@ -51,9 +52,13 @@ export default function CamerasManagerPage() {
     return matchesSearch && matchesSchool && matchesStatus;
   });
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`¿Está seguro de dar de baja el dispositivo '${name}' del Corredor Escolar?`)) {
-      removeDoc("cameras", id).catch((err) => console.error("[cameras]", err));
+  const handleDelete = (cam: Camera) => {
+    if (confirm(`¿Está seguro de dar de baja el dispositivo '${cam.name}' del Corredor Escolar?`)) {
+      // Dar de baja una cámara celular también anula su enlace de vinculación.
+      const revoke = cam.publish_token ? revokePairing(cam.publish_token) : Promise.resolve();
+      revoke
+        .then(() => removeDoc("cameras", cam.id))
+        .catch((err) => console.error("[cameras]", err));
     }
   };
 
@@ -223,7 +228,7 @@ export default function CamerasManagerPage() {
                     </Link>
                     <button
                       disabled={!canEdit}
-                      onClick={() => handleDelete(cam.id, cam.name)}
+                      onClick={() => handleDelete(cam)}
                       className="rounded p-1.5 text-muted hover:bg-rose-500/10 hover:text-rose-400"
                       title="Eliminar dispositivo"
                     >

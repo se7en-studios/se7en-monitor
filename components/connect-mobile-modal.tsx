@@ -11,81 +11,113 @@ import {
   Shield,
   Radio,
   Wifi,
+  Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection } from "@/lib/firebase/data";
 import { logAccess } from "@/lib/firebase/audit";
+import {
+  createPairing,
+  PAIRING_DAYS,
+  type Pairing,
+} from "@/lib/firebase/pairing";
+import { can } from "@/lib/roles";
+import type { Camera } from "@/types/monitor";
 
 interface ConnectMobileModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function ConnectMobileModal({ isOpen, onClose }: ConnectMobileModalProps) {
+// Solo para desarrollo: la IP de esta PC en la red, para abrir el enlace desde un celular.
+const DEV_LAN_HOST = "192.168.18.12";
+
+export function ConnectMobileModal({
+  isOpen,
+  onClose,
+}: ConnectMobileModalProps) {
+  const { profile, user } = useAuth();
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const mobileCameras = useMemo(
+    () => cameras.filter((c) => c.device_type === "mobile_webrtc"),
+    [cameras],
+  );
+
+  const [pickedCameraId, setPickedCameraId] = useState("");
+  const [pairing, setPairing] = useState<Pairing | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [useNetworkIp, setUseNetworkIp] = useState(true);
-  const { profile } = useAuth();
 
-  // Generar el enlace para vincular un celular queda registrado.
-  useEffect(() => {
-    if (!isOpen || !profile) return;
-    void logAccess(
-      { action: "vincular_celular" },
-      { name: profile.full_name, role: profile.role }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, profile?.id]);
+  const camera =
+    mobileCameras.find((c) => c.id === pickedCameraId) ?? mobileCameras[0];
+  const canPair = can.editInfrastructure(profile?.role);
 
-  // Token estable para emparejar con la cámara fija del dashboard
-  const token = "demo-mobile-token-se7en";
-
-  // Determinar la URL para el celular
   const mobileUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return `http://localhost:3000/camera/publish/${token}`;
-    }
+    if (!pairing || typeof window === "undefined") return "";
+    const { hostname, port, origin } = window.location;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    const base =
+      isLocalhost && useNetworkIp
+        ? `http://${DEV_LAN_HOST}${port ? `:${port}` : ""}`
+        : origin;
+    return `${base}/camera/publish/${pairing.token}`;
+  }, [pairing, useNetworkIp]);
 
-    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    
-    // Si estamos en localhost y el usuario prefiere IP de red para escanear con el celular
-    if (isLocalhost && useNetworkIp) {
-      return `http://192.168.18.12:3000/camera/publish/${token}`;
-    }
-
-    return `${window.location.origin}/camera/publish/${token}`;
-  }, [useNetworkIp]);
-
-  // Generar QR de forma controlada y sin bucles infinitos
+  // Al cerrar el diálogo se descarta el enlace de pantalla: no queda a la vista de nadie.
   useEffect(() => {
     if (!isOpen) {
+      setPairing(null);
+      setError(null);
+      setQrDataUrl("");
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!mobileUrl) {
       setQrDataUrl("");
       return;
     }
-
     let isMounted = true;
-
     QRCode.toDataURL(mobileUrl, {
       width: 260,
       margin: 1,
-      color: {
-        dark: "#ffffff",
-        light: "#00000000",
-      },
+      color: { dark: "#ffffff", light: "#00000000" },
     })
-      .then((url) => {
-        if (isMounted) {
-          setQrDataUrl(url);
-        }
-      })
+      .then((url) => isMounted && setQrDataUrl(url))
       .catch((err) => console.error("Error generando QR:", err));
-
     return () => {
       isMounted = false;
     };
-  }, [isOpen, mobileUrl]);
+  }, [mobileUrl]);
 
   if (!isOpen) return null;
+
+  async function handleGenerate() {
+    if (!camera || !user || !profile) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setPairing(await createPairing(camera, user.uid));
+      void logAccess(
+        {
+          action: "vincular_celular",
+          camera_id: camera.id,
+          camera_name: camera.name,
+          school_name: camera.school_name,
+        },
+        { name: profile.full_name, role: profile.role },
+      );
+    } catch (err) {
+      console.error("[pairing]", err);
+      setError("No se pudo generar el enlace. Revisá tus permisos.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(mobileUrl);
@@ -94,117 +126,192 @@ export function ConnectMobileModal({ isOpen, onClose }: ConnectMobileModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
-        {/* Close Button */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+      <div className="relative max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground transition-colors"
+          aria-label="Cerrar"
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted transition-colors hover:bg-white/[0.08] hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
 
-        {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/20 border border-accent/30 text-accent">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-accent/30 bg-accent/20 text-accent">
             <Smartphone className="h-6 w-6" />
           </div>
           <div>
-            <h3 className="adm-title text-[13px] text-foreground">Conectar Dispositivo Móvil</h3>
+            <h3 className="adm-title text-[13px] text-foreground">
+              Vincular celular como cámara
+            </h3>
             <p className="text-xs text-muted">
-              Transmití video en vivo mediante WebRTC desde tu teléfono celular al dashboard
+              Genera un enlace único para que un teléfono transmita en vivo al
+              centro de monitoreo
             </p>
           </div>
         </div>
 
-        {/* QR & Instructions */}
-        <div className="mt-5 flex flex-col items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--well)] p-5 text-center">
-          <div className="relative flex h-52 w-52 items-center justify-center rounded-xl border border-[var(--line)] bg-panel p-3">
-            {qrDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrDataUrl} alt="Escanear QR con celular" className="h-full w-full object-contain" />
-            ) : (
-              <QrCode className="h-20 w-20 text-muted/60 animate-pulse" />
-            )}
-            <div className="absolute -bottom-2.5 rounded-full bg-accent px-3 py-0.5 text-[10px] font-mono font-semibold text-background uppercase tracking-wider shadow">
-              Escanear con la cámara
-            </div>
-          </div>
-
-          <p className="mt-4 text-xs text-foreground/85 max-w-xs leading-relaxed">
-            Abrí la cámara de tu teléfono móvil conectado al Wi-Fi para ingresar al transmisor.
+        {!canPair ? (
+          <p className="mt-5 rounded-lg border border-[var(--line)] p-4 text-xs text-muted">
+            Solo la administración puede vincular celulares.
           </p>
+        ) : mobileCameras.length === 0 ? (
+          <p className="mt-5 rounded-lg border border-[var(--line)] p-4 text-xs text-muted">
+            Todavía no hay cámaras de tipo celular. Dalas de alta en Cámaras →
+            Instalar punto de monitoreo, eligiendo «Celular (WebRTC)». Así queda
+            ubicada dentro del corredor escolar.
+          </p>
+        ) : (
+          <div className="mt-5 space-y-3">
+            <label className="block space-y-1">
+              <span className="adm-label">Cámara a vincular</span>
+              <select
+                value={camera?.id ?? ""}
+                onChange={(e) => {
+                  setPickedCameraId(e.target.value);
+                  setPairing(null);
+                }}
+                className="focus-ring w-full rounded-lg border border-[var(--line-strong)] bg-[var(--well)] px-3 py-2 text-[13px] text-foreground"
+              >
+                {mobileCameras.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.identifier} · {c.name} ({c.school_name})
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          {/* Wi-Fi IP Toggle for local development */}
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-white/[0.03] border border-[var(--line)] px-3 py-1 text-[11px] text-muted">
-            <Wifi className="h-3.5 w-3.5 text-accent" />
-            <span>Red Wi-Fi:</span>
-            <button
-              onClick={() => setUseNetworkIp(!useNetworkIp)}
-              className="font-mono text-accent hover:underline"
-            >
-              {useNetworkIp ? "192.168.18.12:3000 (Móvil)" : "localhost:3000 (Misma PC)"}
-            </button>
+            {!pairing ? (
+              <>
+                <button
+                  onClick={handleGenerate}
+                  disabled={busy}
+                  className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-2.5 text-[13px] font-semibold text-background transition-colors hover:bg-foreground disabled:opacity-60"
+                >
+                  {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Generar enlace seguro
+                </button>
+                {camera?.publish_token && (
+                  <p className="text-[11px] text-amber-300">
+                    Esta cámara ya tenía un enlace: al generar uno nuevo, el
+                    anterior deja de funcionar.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col items-center rounded-xl border border-[var(--line)] bg-[var(--well)] p-5 text-center">
+                  <div className="relative flex h-52 w-52 items-center justify-center rounded-xl border border-[var(--line)] bg-panel p-3">
+                    {qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={qrDataUrl}
+                        alt="Escanear QR con el celular"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <QrCode className="h-20 w-20 animate-pulse text-muted/60" />
+                    )}
+                  </div>
+                  <p className="mt-4 max-w-xs text-xs leading-relaxed text-foreground/85">
+                    Escaneá el código con el celular que va a transmitir. El
+                    enlace vale {PAIRING_DAYS} días (hasta el{" "}
+                    {pairing.expiresAt.toLocaleDateString("es-AR")}) y funciona
+                    para esta cámara.
+                  </p>
+
+                  {typeof window !== "undefined" &&
+                    ["localhost", "127.0.0.1"].includes(
+                      window.location.hostname,
+                    ) && (
+                      <div className="mt-3 flex items-center gap-2 rounded-lg border border-[var(--line)] px-3 py-1 text-[11px] text-muted">
+                        <Wifi className="h-3.5 w-3.5 text-accent" />
+                        <button
+                          onClick={() => setUseNetworkIp(!useNetworkIp)}
+                          className="font-mono text-accent hover:underline"
+                        >
+                          {useNetworkIp
+                            ? `${DEV_LAN_HOST} (desde el celular)`
+                            : "localhost (misma PC)"}
+                        </button>
+                      </div>
+                    )}
+                </div>
+
+                <div>
+                  <span className="adm-label">
+                    Enlace directo (no lo compartas)
+                  </span>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={mobileUrl}
+                      className="flex-1 select-all rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 font-mono text-xs text-foreground/85 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleCopy}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/20 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/30"
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      {copied ? "Copiado" : "Copiar"}
+                    </button>
+                    <a
+                      href={mobileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Abrir en pestaña nueva"
+                      className="inline-flex items-center justify-center rounded-full border border-[var(--line)] p-2 text-foreground/85 hover:bg-white/[0.08]"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {error && (
+              <p role="alert" className="text-xs text-red-400">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-[var(--line)] p-3 text-[11px] text-muted">
+          <Shield className="h-4 w-4 shrink-0 text-emerald-300" />
+          <div className="leading-relaxed">
+            <span className="font-semibold text-emerald-300">
+              Transmisión punto a punto.
+            </span>{" "}
+            El video va directo al centro de monitoreo y no se graba. El enlace
+            es la credencial del celular: cada vinculación queda en la
+            auditoría.
           </div>
         </div>
 
-        {/* Direct Link Section */}
-        <div className="mt-4">
-          <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
-            Enlace directo de publicación
-          </label>
-          <div className="mt-1.5 flex items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={mobileUrl}
-              className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 font-mono text-xs text-foreground/85 focus:outline-none select-all"
-            />
-            <button
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/20 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/30 transition-colors"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copiado" : "Copiar"}
-            </button>
+        <div className="mt-5 flex justify-end gap-3 border-t border-[var(--line)] pt-4">
+          <button
+            onClick={onClose}
+            className="rounded-full border border-[var(--line)] px-4 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05]"
+          >
+            Cerrar
+          </button>
+          {pairing && (
             <a
               href={mobileUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center rounded-full border border-[var(--line)] bg-white/[0.04] p-2 text-foreground/85 hover:bg-white/[0.08] hover:text-foreground transition-colors"
-              title="Abrir en pestaña nueva"
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background transition-colors hover:bg-foreground"
             >
-              <ExternalLink className="h-4 w-4" />
+              <Radio className="h-3.5 w-3.5" />
+              Abrir consola transmisora
             </a>
-          </div>
-        </div>
-
-        {/* Security & Protocol notice */}
-        <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-[11px] text-muted flex items-start gap-2.5">
-          <Shield className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <span className="font-semibold text-emerald-300">Conexión Segura WebRTC P2P:</span>{" "}
-            El video se transmite punto a punto directamente al centro de monitoreo sin almacenar grabaciones de los alumnos.
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-5 flex justify-end gap-3 border-t border-[var(--line)] pt-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-[var(--line)] px-4 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05] transition-colors"
-          >
-            Cerrar
-          </button>
-          <a
-            href={mobileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
-          >
-            <Radio className="h-3.5 w-3.5 animate-pulse" />
-            Abrir Consola Transmisora
-          </a>
+          )}
         </div>
       </div>
     </div>

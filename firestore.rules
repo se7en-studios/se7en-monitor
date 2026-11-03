@@ -54,12 +54,23 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Señalización WebRTC. El celular emisor entra por token sin login.
-    // TODO: restringir (token de sesión firmado) antes de abrir a producción real.
+    // Vinculación de celulares. El token (UUID impredecible) es el id del documento y
+    // es la credencial del celular, que transmite sin login. Solo la administración
+    // los crea y los revoca; vencen solos (expires_at).
+    match /pairings/{token} {
+      allow read, write: if isAdmin();
+    }
+
+    // Señalización WebRTC: solo se acepta para sesiones cuyo token tiene una vinculación
+    // vigente. Se permite leer un documento por id, pero no listar sesiones. Sin `get()`
+    // sobre una vinculación inexistente o vencida, la regla falla y se deniega.
+    function pairingValid(token) {
+      return get(/databases/$(database)/documents/pairings/$(token)).data.expires_at > request.time;
+    }
     match /camera_sessions/{sessionId} {
-      allow read, write: if true;
-      match /callerCandidates/{id} { allow read, write: if true; }
-      match /calleeCandidates/{id} { allow read, write: if true; }
+      allow get, create, update, delete: if pairingValid(sessionId);
+      match /callerCandidates/{id} { allow read, write: if pairingValid(sessionId); }
+      match /calleeCandidates/{id} { allow read, write: if pairingValid(sessionId); }
     }
   }
 }

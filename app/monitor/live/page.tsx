@@ -23,7 +23,7 @@ import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
 import { CameraFullscreenModal } from "@/components/camera-fullscreen-modal";
 import { Camera } from "@/types/monitor";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeAgo } from "@/lib/utils";
 
 export default function LiveMonitoringPage() {
   const [gridLayout, setGridLayout] = useState<"1x1" | "2x2" | "3x3">("2x2");
@@ -181,7 +181,7 @@ export default function LiveMonitoringPage() {
               {/* Video Frame Container */}
               {isMobileDevice ? (
                 <WebRTCReceiverTile
-                  token={cam.publish_token || "demo-mobile-token-se7en"}
+                  token={cam.publish_token ?? ""}
                   onOpenPairModal={() => setIsConnectModalOpen(true)}
                   isMuted={isMuted}
                 />
@@ -194,7 +194,9 @@ export default function LiveMonitoringPage() {
                         Cámara Sin Señal de Red
                       </p>
                       <p className="text-[10px] text-muted mt-0.5">
-                        Último ping registrado: hace 2 horas
+                        {cam.last_heartbeat
+                          ? `Última señal: ${formatTimeAgo(cam.last_heartbeat)}`
+                          : "Todavía no transmitió"}
                       </p>
                     </div>
                   ) : (
