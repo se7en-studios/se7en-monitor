@@ -39,7 +39,7 @@ const SCHOOL_GLYPH = SVG(
 );
 
 const escapeHtml = (s: string) =>
-  s.replace(
+  String(s ?? "").replace(
     /[&<>"']/g,
     (ch) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
@@ -97,15 +97,15 @@ export function InteractiveMap({
       zoom: 15,
       zoomControl: false,
     });
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://carto.com/">CARTO</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        subdomains: "abcd",
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    // Mosaicos de OpenStreetMap, oscurecidos con CSS (.map-tiles en globals.css). Los de CARTO
+    // pasaron a exigir clave de API y mostraban una marca de agua. Para mucho tráfico, usar un
+    // proveedor con clave propia (MapTiler, Stadia) y cambiar solo esta URL.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+      className: "map-tiles",
+    }).addTo(map);
     L.control
       .zoom({
         position: "topright",
@@ -151,7 +151,7 @@ export function InteractiveMap({
           fillOpacity: 0.1,
         })
           .bindTooltip(
-            `<strong>${escapeHtml(sch.name)}</strong><br/>Radio protegido: ${sch.perimeter_radius_meters} m`,
+            `<strong>${escapeHtml(sch.name)}</strong><br/>Radio protegido: ${Number(sch.perimeter_radius_meters) || 0} m`,
             { className: "leaflet-dark-tooltip", sticky: true },
           )
           .addTo(circles);

@@ -398,3 +398,8 @@ th {
     display: none !important;
   }
 }
+
+/* Mapa: los mosaicos de OpenStreetMap vienen claros; se invierten para el tema oscuro. */
+.map-tiles {
+  filter: invert(1) hue-rotate(200deg) brightness(0.78) contrast(0.92) saturate(0.55);
+}
