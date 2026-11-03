@@ -6,6 +6,16 @@ import type { Camera } from "@/types/monitor";
 export const PAIRING_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const TOKEN_BYTES = 16; // 128 bits de aleatoriedad
+
+/**
+ * Token impredecible. Usa getRandomValues y no randomUUID porque este último solo
+ * existe en contextos seguros (https o localhost): desde http://192.168.x.x fallaba.
+ */
+function newToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export interface Pairing {
   token: string;
@@ -22,7 +32,7 @@ export async function createPairing(
   camera: Camera,
   uid: string,
 ): Promise<Pairing> {
-  const token = crypto.randomUUID();
+  const token = newToken();
   const expiresAt = new Date(Date.now() + PAIRING_DAYS * DAY_MS);
 
   const batch = writeBatch(db);

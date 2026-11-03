@@ -119,10 +119,15 @@ export function ConnectMobileModal({
     }
   }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(mobileUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(mobileUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // El portapapeles solo existe en https o localhost: el campo es seleccionable.
+      setError("Este navegador no permite copiar desde esta dirección. Seleccioná el enlace y copialo a mano.");
+    }
   };
 
   return (
