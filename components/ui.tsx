@@ -205,3 +205,12 @@ export function Skeleton({ className }: { className?: string }) {
     />
   );
 }
+
+/** Tecla, para atajos y ayudas de teclado. */
+export function Kbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="inline-flex min-w-5 items-center justify-center rounded-md border border-[var(--line-strong)] px-1.5 py-px font-mono text-[10.5px] text-muted">
+      {children}
+    </kbd>
+  );
+}

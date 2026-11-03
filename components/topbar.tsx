@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Smartphone, Shield, Clock } from "lucide-react";
+import Link from "next/link";
+import { Search, Smartphone, Shield, Clock, Menu, Radio } from "lucide-react";
+import { btnPrimary } from "@/components/ui";
 import { ConnectMobileModal } from "./connect-mobile-modal";
 
 interface TopbarProps {
-  onOpenCommandMenu?: () => void;
+  onOpenCommandMenu: () => void;
+  onOpenMenu: () => void;
 }
 
-export function Topbar({ onOpenCommandMenu }: TopbarProps) {
+const ICON_BTN =
+  "focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground";
+
+/**
+ * Barra superior fija. En celular y tablet lleva el botón del menú, el logo y la
+ * lupa; desde lg, el buscador ancho (la navegación está en la barra flotante).
+ */
+export function Topbar({ onOpenCommandMenu, onOpenMenu }: TopbarProps) {
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [time, setTime] = useState("");
 
@@ -28,34 +38,68 @@ export function Topbar({ onOpenCommandMenu }: TopbarProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between gap-4 border-b border-[var(--line)] bg-background/90 px-6 backdrop-blur">
+      <header className="sticky top-0 z-30 flex h-14 w-full items-center gap-2 border-b border-[var(--line)] bg-background/90 px-3 backdrop-blur sm:gap-3 sm:px-4 lg:h-16 lg:px-8">
         <button
-          onClick={onOpenCommandMenu}
-          className="focus-ring group relative flex w-full max-w-md items-center justify-between rounded-full border border-[var(--line)] bg-panel py-2 pl-9 pr-3 text-[13px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-foreground"
+          type="button"
+          onClick={onOpenMenu}
+          aria-label="Abrir menú"
+          className={`${ICON_BTN} lg:hidden`}
         >
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <Menu className="h-[18px] w-[18px]" />
+        </button>
+        <Link
+          href="/"
+          aria-label="Inicio"
+          className="focus-ring flex min-w-0 items-center gap-2 rounded-full lg:hidden"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-background">
+            <Radio className="h-3.5 w-3.5" />
+          </span>
+          <span className="adm-title truncate text-[14px] text-foreground">
+            Se7en <span className="adm-serif">monitor</span>
+          </span>
+        </Link>
+
+        <button
+          type="button"
+          onClick={onOpenCommandMenu}
+          className="focus-ring relative hidden w-full max-w-md items-center justify-between rounded-full border border-[var(--line)] bg-panel py-2 pr-3 pl-9 text-[13px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-foreground lg:flex"
+        >
+          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
           <span className="truncate">
             Buscar escuelas, cámaras o incidentes…
           </span>
-          <kbd className="hidden items-center rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[10px] text-muted sm:inline-flex">
+          <kbd className="inline-flex items-center rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[10px] text-muted">
             Ctrl K
           </kbd>
         </button>
 
-        <div className="adm-label hidden items-center gap-2 lg:flex">
+        <div className="adm-label hidden items-center gap-2 xl:flex">
           <Shield className="h-3.5 w-3.5 text-accent" />
           <span>Centro de Monitoreo Urbano · Catriel</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-1.5 rounded-full border border-[var(--line)] bg-panel px-3 py-1.5 font-mono text-xs text-muted sm:flex">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={onOpenCommandMenu}
+            aria-label="Buscar escuelas, cámaras o incidentes"
+            className={`${ICON_BTN} lg:hidden`}
+          >
+            <Search className="h-[18px] w-[18px]" />
+          </button>
+          <div
+            className="hidden items-center gap-1.5 rounded-full border border-[var(--line)] bg-panel px-3 py-1.5 font-mono text-xs text-muted md:flex"
+            aria-label="Hora actual"
+          >
             <Clock className="h-3.5 w-3.5" />
             <span>{time || "--:--:--"}</span>
           </div>
-
           <button
+            type="button"
             onClick={() => setIsConnectOpen(true)}
-            className="focus-ring inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-[13px] font-semibold text-background transition-colors hover:bg-foreground"
+            aria-label="Conectar celular como cámara"
+            className={`${btnPrimary} h-9 px-2.5 sm:px-3.5`}
           >
             <Smartphone className="h-4 w-4" />
             <span className="hidden sm:inline">Conectar celular</span>
