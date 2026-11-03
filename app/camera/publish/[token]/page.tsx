@@ -130,16 +130,16 @@ export default function MobilePublisherPage({
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col justify-between bg-black text-white p-4 select-none">
+    <div className="relative flex min-h-screen flex-col justify-between bg-black text-foreground p-4 select-none">
       {/* Top Mobile Bar HUD */}
-      <div className="z-20 flex items-center justify-between rounded-xl bg-black/60 backdrop-blur-md p-3 border border-white/10">
+      <div className="z-20 flex items-center justify-between rounded-xl bg-black/60 backdrop-blur-md p-3 border border-[var(--line)]">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600/30 text-blue-400 border border-blue-500/40">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/30 text-accent border border-accent/40">
             <Radio className="h-4 w-4" />
           </div>
           <div>
             <p className="text-xs font-bold leading-tight">SE7EN TRANSMITTER</p>
-            <p className="text-[10px] font-mono text-slate-400">
+            <p className="text-[10px] font-mono text-muted">
               Firebase WebRTC · Catriel Escuelas
             </p>
           </div>
@@ -148,7 +148,7 @@ export default function MobilePublisherPage({
         {/* Live Status Pill */}
         <div className="flex items-center gap-2">
           {status === "live" ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-mono font-bold text-white uppercase tracking-wider animate-pulse">
+            <span className="flex items-center gap-1.5 rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-mono font-bold text-foreground uppercase tracking-wider animate-pulse">
               <span className="h-2 w-2 rounded-full bg-white" />
               EMITIENDO EN VIVO
             </span>
@@ -157,7 +157,7 @@ export default function MobilePublisherPage({
               SEÑALIZANDO...
             </span>
           ) : (
-            <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono text-slate-400">
+            <span className="rounded-full bg-panel-3 px-2.5 py-0.5 text-[10px] font-mono text-muted">
               EN ESPERA
             </span>
           )}
@@ -165,28 +165,28 @@ export default function MobilePublisherPage({
       </div>
 
       {/* Main Viewport / Camera Preview */}
-      <div className="relative my-4 flex-1 overflow-hidden rounded-2xl border border-white/15 bg-zinc-950 flex items-center justify-center">
+      <div className="relative my-4 flex-1 overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-zinc-950 flex items-center justify-center">
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
           className={`h-full w-full object-cover ${
-            facingMode === "user" ? "scale-x-[-1]" : ""
-          }`}
+ facingMode ==="user" ?"scale-x-[-1]" :""
+ }`}
         />
 
         {/* Permission Request State */}
         {hasPermission === false && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-6 text-center">
             <AlertCircle className="h-12 w-12 text-rose-500 mb-3" />
-            <h3 className="text-base font-bold text-white">Permiso de Cámara Requerido</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs">
+            <h3 className="adm-title text-[13px] text-foreground">Permiso de Cámara Requerido</h3>
+            <p className="text-xs text-muted mt-1 max-w-xs">
               Por favor habilite los permisos de cámara en su navegador para transmitir video al centro de monitoreo.
             </p>
             <button
               onClick={() => startCamera(facingMode)}
-              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white"
+              className="mt-4 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background"
             >
               Reintentar
             </button>
@@ -204,7 +204,7 @@ export default function MobilePublisherPage({
         {/* Camera switch button floating on preview */}
         <button
           onClick={toggleFacingMode}
-          className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white shadow-lg active:scale-95 transition-transform"
+          className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-[var(--line-strong)] text-foreground active:scale-95 transition-transform"
           title="Cambiar a cámara frontal o trasera"
         >
           <SwitchCamera className="h-5 w-5" />
@@ -218,7 +218,7 @@ export default function MobilePublisherPage({
           <button
             onClick={handleStartBroadcast}
             disabled={!hasPermission}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-sm font-bold uppercase tracking-wider text-white shadow-xl shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-accent py-4 text-sm font-bold uppercase tracking-wider text-foreground active:scale-[0.98] transition-all disabled:opacity-50"
           >
             <Radio className="h-5 w-5 animate-pulse" />
             INICIAR TRANSMISIÓN AL DASHBOARD
@@ -226,7 +226,7 @@ export default function MobilePublisherPage({
         ) : (
           <button
             onClick={handleStopBroadcast}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-rose-600 py-4 text-sm font-bold uppercase tracking-wider text-white shadow-xl shadow-rose-600/30 active:scale-[0.98] transition-all"
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-rose-600 py-4 text-sm font-bold uppercase tracking-wider text-foreground active:scale-[0.98] transition-all"
           >
             <Square className="h-5 w-5" />
             DETENER TRANSMISIÓN
@@ -234,7 +234,7 @@ export default function MobilePublisherPage({
         )}
 
         {/* Security / Educational Privacy Note */}
-        <div className="flex items-center justify-center gap-2 text-center text-[11px] text-slate-500">
+        <div className="flex items-center justify-center gap-2 text-center text-[11px] text-muted">
           <Shield className="h-3.5 w-3.5 text-emerald-500" />
           <span>Canal P2P WebRTC Encriptado · Firestore Signaling</span>
         </div>

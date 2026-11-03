@@ -96,17 +96,17 @@ export function InteractiveMap({
       const schoolIcon = L.divIcon({
         className: "custom-school-icon",
         html: `
-          <div class="relative flex items-center justify-center">
-            <div class="h-9 w-9 rounded-full ${
-              isSelected ? "bg-blue-500 ring-4 ring-blue-400/50 scale-110" : "bg-blue-600"
-            } text-white flex items-center justify-center shadow-lg border-2 border-white transition-all cursor-pointer">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/></svg>
-            </div>
-            <div class="absolute -bottom-5 whitespace-nowrap bg-[#0c101a] text-slate-200 text-[10px] font-mono px-1.5 py-0.5 rounded border border-white/20 shadow">
-              ${sch.code}
-            </div>
-          </div>
-        `,
+ <div class="relative flex items-center justify-center">
+ <div class="h-9 w-9 rounded-full ${
+ isSelected ?"bg-accent ring-4 ring-accent/50 scale-110" :"bg-accent"
+ } text-background flex items-center justify-center border-2 border-white transition-all cursor-pointer">
+ <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 8-4 8 4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="M18 5v17"/><path d="M6 5v17"/></svg>
+ </div>
+ <div class="absolute -bottom-5 whitespace-nowrap bg-panel text-foreground text-[10px] font-mono px-1.5 py-0.5 rounded border border-[var(--line-strong)] shadow">
+ ${sch.code}
+ </div>
+ </div>
+`,
         iconSize: [36, 36],
         iconAnchor: [18, 18],
       });
@@ -141,14 +141,14 @@ export function InteractiveMap({
         const camIcon = L.divIcon({
           className: "custom-cam-icon",
           html: `
-            <div class="relative flex items-center justify-center cursor-pointer group">
-              <div class="h-6 w-6 rounded-full ${color} ${
-            isMobile ? "animate-pulse ring-2 ring-cyan-400" : ""
-          } text-black font-bold flex items-center justify-center shadow-md border border-black/40">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.75 12h3.25a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h3.25"/><path d="m10 6 2-2 2 2"/><path d="M12 4v8"/></svg>
-              </div>
-            </div>
-          `,
+ <div class="relative flex items-center justify-center cursor-pointer group">
+ <div class="h-6 w-6 rounded-full ${color} ${
+ isMobile ?"animate-pulse ring-2 ring-accent/50" :""
+ } text-background font-bold flex items-center justify-center border border-black/40">
+ <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.75 12h3.25a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h3.25"/><path d="m10 6 2-2 2 2"/><path d="M12 4v8"/></svg>
+ </div>
+ </div>
+`,
           iconSize: [24, 24],
           iconAnchor: [12, 12],
         });

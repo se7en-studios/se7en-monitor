@@ -22,51 +22,38 @@ export function StatCard({
   trend,
   highlightColor = "blue",
 }: StatCardProps) {
-  const colorMap = {
-    blue: "text-blue-400 bg-blue-500/10 border-blue-500/20 group-hover:border-blue-500/40",
-    emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20 group-hover:border-emerald-500/40",
-    amber: "text-amber-400 bg-amber-500/10 border-amber-500/20 group-hover:border-amber-500/40",
-    rose: "text-rose-400 bg-rose-500/10 border-rose-500/20 group-hover:border-rose-500/40",
-    indigo: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20 group-hover:border-indigo-500/40",
+  const toneText = {
+    blue: "text-accent",
+    indigo: "text-accent",
+    emerald: "text-emerald-300",
+    amber: "text-amber-300",
+    rose: "text-red-400",
   };
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#0e131f] p-5 transition-all duration-300 hover:border-white/[0.16] hover:bg-[#121929] hover:shadow-xl hover:shadow-black/40">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            {title}
-          </p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-bold tracking-tight text-white">
-              {value}
-            </span>
-            {subtitle && (
-              <span className="text-xs text-slate-400">
-                {subtitle}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className={cn("rounded-lg border p-2.5 transition-colors", colorMap[highlightColor])}>
-          {icon}
-        </div>
+    <div className="adm-in rounded-xl border border-[var(--line)] bg-panel p-4 transition-colors hover:border-[var(--line-strong)]">
+      <p className="adm-label flex items-center justify-between gap-2">
+        <span className="truncate">{title}</span>
+        <span className={cn("shrink-0", toneText[highlightColor])}>{icon}</span>
+      </p>
+      <div className="mt-4 flex items-baseline gap-2">
+        <span className="adm-num text-[44px] leading-none text-foreground">{value}</span>
+        {subtitle && <span className="text-[12px] text-muted">{subtitle}</span>}
       </div>
 
       {trend && (
-        <div className="mt-4 flex items-center gap-1.5 text-xs">
+        <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--line)] pt-3 text-[12px]">
           <span
             className={cn(
-              "font-mono font-semibold",
-              trend.isPositive ? "text-emerald-400" : "text-rose-400"
+              "font-mono font-medium",
+              trend.isPositive ? "text-emerald-300" : "text-red-400"
             )}
           >
             {trend.value}
           </span>
-          <span className="text-slate-500">{trend.label || "vs. período anterior"}</span>
+          <span className="text-muted">{trend.label || "vs. período anterior"}</span>
         </div>
       )}
     </div>
   );
 }
-

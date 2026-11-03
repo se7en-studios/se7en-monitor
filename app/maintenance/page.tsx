@@ -9,7 +9,7 @@ import type { Camera, MaintenanceTicket } from "@/types/monitor";
 
 const sortTickets = byNewest("created_at");
 const INPUT =
-  "w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-sm text-white outline-none focus:border-blue-500/60";
+  "w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-sm text-foreground outline-none focus:border-accent/60";
 const NEXT_STATUS: Record<MaintenanceTicket["status"], MaintenanceTicket["status"]> = {
   pendiente: "en_curso",
   en_curso: "completado",
@@ -71,12 +71,12 @@ function NewTicketModal({ cameras, onClose }: { cameras: Camera[]; onClose: () =
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md space-y-4 rounded-xl border border-white/[0.08] bg-[#0c101a] p-5"
+        className="w-full max-w-md space-y-4 rounded-xl border border-[var(--line)] bg-panel p-5"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-white">Nueva orden de trabajo</h2>
+          <h2 className="adm-title text-[13px] text-foreground">Nueva orden de trabajo</h2>
           <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X className="h-4 w-4 text-slate-400" />
+            <X className="h-4 w-4 text-muted" />
           </button>
         </div>
         <select className={INPUT} value={cameraId} onChange={(e) => setCameraId(e.target.value)}>
@@ -103,7 +103,7 @@ function NewTicketModal({ cameras, onClose }: { cameras: Camera[]; onClose: () =
         <button
           type="submit"
           disabled={busy || !cameraId}
-          className="w-full rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+          className="w-full rounded-full bg-accent px-3.5 py-2 text-sm font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-60"
         >
           Crear orden
         </button>
@@ -123,13 +123,13 @@ export default function MaintenancePage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <span className="font-mono text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+          <span className="adm-label">
             SOPORTE DE INFRAESTRUCTURA
           </span>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
+          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
             Mantenimiento y Cuadrillas
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted">
             Seguimiento de reparaciones, limpieza de ópticas y tendido de fibra en Catriel
           </p>
         </div>
@@ -137,7 +137,7 @@ export default function MaintenancePage() {
         <button
           disabled={!canHandle || cameras.length === 0}
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+          className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
         >
           <Plus className="h-4 w-4" />
           <span>Nuevo Ticket de Trabajo</span>
@@ -145,37 +145,37 @@ export default function MaintenancePage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {loading && <p className="text-xs text-slate-500">Cargando…</p>}
+        {loading && <p className="text-xs text-muted">Cargando…</p>}
         {tickets.map((ticket) => (
           <div
             key={ticket.id}
-            className="rounded-xl border border-white/[0.08] bg-[#0c101a] p-5 space-y-4"
+            className="rounded-xl border border-[var(--line)] bg-panel p-5 space-y-4"
           >
-            <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
-              <span className="font-mono text-xs font-bold text-blue-400">
+            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
+              <span className="font-mono text-xs font-bold text-accent">
                 {ticket.code}
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-mono font-bold uppercase border ${
-                  ticket.priority === "urgente"
-                    ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                    : "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                }`}
+ ticket.priority ==="urgente"
+ ?"bg-rose-500/10 text-rose-400 border-rose-500/30"
+ :"bg-accent-soft text-accent border-accent/30"
+ }`}
               >
                 {ticket.priority}
               </span>
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-white">{ticket.title}</h3>
-              <p className="text-xs text-slate-400 mt-1">
+              <h3 className="adm-title text-[13px] text-foreground">{ticket.title}</h3>
+              <p className="text-xs text-muted mt-1">
                 {ticket.school_name} · {ticket.camera_name}
               </p>
             </div>
 
-            <div className="pt-3 border-t border-white/[0.04] flex items-center justify-between text-xs text-slate-400">
+            <div className="pt-3 border-t border-[var(--line)] flex items-center justify-between text-xs text-muted">
               <span className="flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-blue-400" />
+                <User className="h-3.5 w-3.5 text-accent" />
                 <span>{ticket.technician}</span>
               </span>
 
@@ -193,7 +193,7 @@ export default function MaintenancePage() {
                     (err) => console.error("[maintenance]", err)
                   )
                 }
-                className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-slate-200 hover:bg-white/[0.1] disabled:opacity-60"
+                className="rounded-lg border border-[var(--line)] bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-foreground hover:bg-white/[0.1] disabled:opacity-60"
               >
                 {STATUS_LABEL[ticket.status]}
               </button>

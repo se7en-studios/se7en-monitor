@@ -41,10 +41,10 @@ export default function ReportsPage() {
           <span className="font-mono text-xs font-semibold text-emerald-400 uppercase tracking-wider">
             AUDITORÍA Y RENDICIÓN DE FONDOS PÚBLICOS
           </span>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
+          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
             Reportes e Informes Oficiales
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted">
             Métricas de transparencia para el Concejo Deliberante y autoridades educativas
           </p>
         </div>
@@ -56,7 +56,7 @@ export default function ReportsPage() {
               period: "Noviembre 2026",
             })
           }
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+          className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
         >
           <Calendar className="h-4 w-4" />
           <span>Generar Reporte Personalizado</span>
@@ -67,15 +67,15 @@ export default function ReportsPage() {
         {reports.map((rep, idx) => (
           <div
             key={idx}
-            className="rounded-xl border border-white/[0.08] bg-[#0c101a] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-white/[0.14] transition-all"
+            className="rounded-xl border border-[var(--line)] bg-panel p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[var(--line-strong)] transition-all"
           >
             <div className="flex items-start gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft border border-accent/20 text-accent shrink-0">
                 <FileBarChart className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white">{rep.title}</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <h3 className="adm-title text-[13px] text-foreground">{rep.title}</h3>
+                <p className="text-xs text-muted mt-0.5">
                   Período: {rep.period} · Disponibilidad: <span className="text-emerald-400 font-mono">{rep.uptime}</span> · {rep.incidents} incidentes registrados
                 </p>
               </div>
@@ -89,7 +89,7 @@ export default function ReportsPage() {
                     period: rep.period,
                   })
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-600/15 px-3 py-2 text-xs font-semibold text-blue-300 hover:bg-blue-600/25 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25 transition-colors"
               >
                 <Eye className="h-4 w-4" />
                 <span>Ver e Imprimir</span>
@@ -102,9 +102,9 @@ export default function ReportsPage() {
                     period: rep.period,
                   })
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/[0.05]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05]"
               >
-                <Download className="h-4 w-4 text-blue-400" />
+                <Download className="h-4 w-4 text-accent" />
                 <span>PDF ({rep.size})</span>
               </button>
             </div>

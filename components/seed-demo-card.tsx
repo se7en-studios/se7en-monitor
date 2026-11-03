@@ -32,23 +32,23 @@ export function SeedDemoCard() {
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-[#0c101a] p-5 space-y-3">
-      <div className="flex items-center gap-2.5 text-white font-semibold text-sm">
-        <Database className="h-4 w-4 text-blue-400" />
+    <div className="rounded-xl border border-[var(--line)] bg-panel p-5 space-y-3">
+      <div className="flex items-center gap-2.5 text-foreground font-semibold text-sm">
+        <Database className="h-4 w-4 text-accent" />
         <span>Datos demo de Catriel</span>
       </div>
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-muted">
         Carga escuelas, cámaras, incidentes, alertas y tickets de ejemplo. Solo completa colecciones vacías.
       </p>
       <button
         onClick={onClick}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+        className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-60"
       >
         {busy && <Loader2 className="h-4 w-4 animate-spin" />}
         Cargar datos demo
       </button>
-      {message && <p className="text-xs text-slate-300">{message}</p>}
+      {message && <p className="text-xs text-foreground/85">{message}</p>}
     </div>
   );
 }

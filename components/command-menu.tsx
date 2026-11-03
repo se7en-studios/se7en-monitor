@@ -69,21 +69,21 @@ export function CommandMenu() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-md pt-[12vh] p-4 animate-in fade-in duration-150">
-      <div className="relative w-full max-w-xl rounded-2xl border border-white/[0.14] bg-[#0c101a] shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-xl rounded-2xl border border-[var(--line-strong)] bg-panel overflow-hidden">
         {/* Search Input Bar */}
-        <div className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 bg-[#070a12]">
-          <Search className="h-5 w-5 text-blue-400 shrink-0" />
+        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3.5 bg-[var(--well)]">
+          <Search className="h-5 w-5 text-accent shrink-0" />
           <input
             autoFocus
             type="text"
             placeholder="Buscar escuelas, cámaras, incidentes o comandos (ej: 'CEM 21', 'CAM-204')..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted/60 focus:outline-none"
           />
           <button
             onClick={() => setIsOpen(false)}
-            className="rounded p-1 text-slate-500 hover:text-white"
+            className="rounded p-1 text-muted hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -94,7 +94,7 @@ export function CommandMenu() {
           {/* Quick Navigation Commands */}
           {!query && (
             <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
                 Navegación Rápida
               </p>
               <div className="mt-1 space-y-0.5">
@@ -110,13 +110,13 @@ export function CommandMenu() {
                     <div
                       key={idx}
                       onClick={() => handleSelect(item.href)}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white cursor-pointer transition-colors"
+                      className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-2.5">
-                        <Icon className="h-4 w-4 text-blue-400" />
+                        <Icon className="h-4 w-4 text-accent" />
                         <span>{item.name}</span>
                       </div>
-                      <ArrowRight className="h-3.5 w-3.5 text-slate-600" />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted/60" />
                     </div>
                   );
                 })}
@@ -127,7 +127,7 @@ export function CommandMenu() {
           {/* Schools Matches */}
           {filteredSchools.length > 0 && (
             <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
                 Establecimientos Educativos ({filteredSchools.length})
               </p>
               <div className="mt-1 space-y-0.5">
@@ -135,16 +135,16 @@ export function CommandMenu() {
                   <div
                     key={s.id}
                     onClick={() => handleSelect(`/schools`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white cursor-pointer"
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <School className="h-4 w-4 text-cyan-400" />
+                      <School className="h-4 w-4 text-accent" />
                       <div>
-                        <p className="font-semibold text-white">{s.name}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">{s.code} · {s.address}</p>
+                        <p className="font-semibold text-foreground">{s.name}</p>
+                        <p className="text-[10px] text-muted font-mono">{s.code} · {s.address}</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-cyan-400">Radio 200m</span>
+                    <span className="text-[10px] font-mono text-accent">Radio 200m</span>
                   </div>
                 ))}
               </div>
@@ -154,7 +154,7 @@ export function CommandMenu() {
           {/* Cameras Matches */}
           {filteredCameras.length > 0 && (
             <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
                 Cámaras de Seguridad ({filteredCameras.length})
               </p>
               <div className="mt-1 space-y-0.5">
@@ -162,13 +162,13 @@ export function CommandMenu() {
                   <div
                     key={c.id}
                     onClick={() => handleSelect(`/monitor/live?focus=${c.id}`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white cursor-pointer"
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Cctv className="h-4 w-4 text-blue-400" />
+                      <Cctv className="h-4 w-4 text-accent" />
                       <div>
-                        <p className="font-semibold text-white">{c.name}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">{c.identifier} · {c.school_name}</p>
+                        <p className="font-semibold text-foreground">{c.name}</p>
+                        <p className="text-[10px] text-muted font-mono">{c.identifier} · {c.school_name}</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-emerald-400 uppercase">{c.status}</span>
@@ -181,7 +181,7 @@ export function CommandMenu() {
           {/* Incidents Matches */}
           {filteredIncidents.length > 0 && (
             <div>
-              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+              <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-muted">
                 Incidentes y Novedades ({filteredIncidents.length})
               </p>
               <div className="mt-1 space-y-0.5">
@@ -189,13 +189,13 @@ export function CommandMenu() {
                   <div
                     key={i.id}
                     onClick={() => handleSelect(`/incidents`)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white cursor-pointer"
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-foreground/85 hover:bg-white/[0.06] hover:text-foreground cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
                       <AlertTriangle className="h-4 w-4 text-amber-400" />
                       <div>
-                        <p className="font-semibold text-white">{i.title}</p>
-                        <p className="text-[10px] text-slate-500 font-mono">{i.code} · {i.school_name}</p>
+                        <p className="font-semibold text-foreground">{i.title}</p>
+                        <p className="text-[10px] text-muted font-mono">{i.code} · {i.school_name}</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-amber-400 uppercase">{i.priority}</span>
@@ -207,9 +207,9 @@ export function CommandMenu() {
         </div>
 
         {/* Footer shortcuts */}
-        <div className="border-t border-white/[0.06] bg-[#070a12] px-4 py-2 flex items-center justify-between text-[11px] text-slate-500">
+        <div className="border-t border-[var(--line)] bg-[var(--well)] px-4 py-2 flex items-center justify-between text-[11px] text-muted">
           <div className="flex items-center gap-2">
-            <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+            <kbd className="rounded border border-[var(--line)] bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-muted">
               ESC
             </kbd>
             <span>para cerrar</span>
