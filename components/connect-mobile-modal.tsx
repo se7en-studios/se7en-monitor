@@ -33,6 +33,10 @@ interface ConnectMobileModalProps {
 // Solo para desarrollo: la IP de esta PC en la red, para abrir el enlace desde un celular.
 const DEV_LAN_HOST = "192.168.18.12";
 
+// Dirección https desde la que el celular abre la consola transmisora (sin barra final).
+const CONFIGURED_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+const PUBLIC_BASE = CONFIGURED_URL.startsWith("https://") ? CONFIGURED_URL : "";
+
 export function ConnectMobileModal({
   isOpen,
   onClose,
@@ -60,8 +64,11 @@ export function ConnectMobileModal({
     if (!pairing || typeof window === "undefined") return "";
     const { hostname, port, origin } = window.location;
     const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-    const base =
-      isLocalhost && useNetworkIp
+    // Si hay una dirección pública https configurada, el celular entra por ahí aunque el
+    // centro de monitoreo se use en localhost: así el navegador le permite la cámara.
+    const base = PUBLIC_BASE
+      ? PUBLIC_BASE
+      : isLocalhost && useNetworkIp
         ? `http://${DEV_LAN_HOST}${port ? `:${port}` : ""}`
         : origin;
     return `${base}/camera/publish/${pairing.token}`;
@@ -225,7 +232,8 @@ export function ConnectMobileModal({
                     para esta cámara.
                   </p>
 
-                  {typeof window !== "undefined" &&
+                  {!PUBLIC_BASE &&
+                    typeof window !== "undefined" &&
                     ["localhost", "127.0.0.1"].includes(
                       window.location.hostname,
                     ) && (
