@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { useCollection, saveDoc, patchDoc, logActivity, byNewest } from "@/lib/firebase/data";
+import { can } from "@/lib/roles";
 import {
   AlertTriangle,
   Search,
@@ -13,14 +16,17 @@ import {
   Filter,
   CheckCircle2,
 } from "lucide-react";
-import { MOCK_INCIDENTS } from "@/data/mock-data";
 import { Incident, IncidentStatus, IncidentPriority } from "@/types/monitor";
 import { NewIncidentModal } from "@/components/new-incident-modal";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
+const sortIncidents = byNewest("reported_at");
+
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
+  const { profile } = useAuth();
+  const canHandle = can.handleIncidents(profile?.role);
+  const { data: incidents } = useCollection<Incident>("incidents", sortIncidents);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -40,7 +46,17 @@ export default function IncidentsPage() {
   });
 
   const handleAddIncident = (newInc: Incident) => {
-    setIncidents([newInc, ...incidents]);
+    saveDoc("incidents", newInc)
+      .then(() =>
+        logActivity({
+          event_type: "incident_created",
+          title: "Incidente reportado",
+          description: `${newInc.code} · ${newInc.title}`,
+          entity_type: "incident",
+          entity_id: newInc.id,
+        })
+      )
+      .catch((err) => console.error("[incidents]", err));
   };
 
   const cycleStatus = (id: string, currentStatus: IncidentStatus) => {
@@ -52,10 +68,8 @@ export default function IncidentsPage() {
       cerrado: "nuevo",
     };
 
-    setIncidents(
-      incidents.map((i) =>
-        i.id === id ? { ...i, status: nextStatusMap[currentStatus] } : i
-      )
+    patchDoc("incidents", id, { status: nextStatusMap[currentStatus] }).catch((err) =>
+      console.error("[incidents]", err)
     );
   };
 
@@ -66,24 +80,24 @@ export default function IncidentsPage() {
       case "alta":
         return "bg-amber-500/10 text-amber-400 border-amber-500/30";
       case "media":
-        return "bg-blue-500/10 text-blue-400 border-blue-500/30";
+        return "bg-accent-soft text-accent border-accent/30";
       case "baja":
-        return "bg-slate-500/10 text-slate-400 border-slate-500/30";
+        return "bg-panel-3/10 text-muted border-[var(--line-strong)]/30";
     }
   };
 
   const getStatusBadge = (s: IncidentStatus) => {
     switch (s) {
       case "nuevo":
-        return "bg-cyan-500/10 text-cyan-400 border-cyan-500/30";
+        return "bg-accent-soft text-accent border-accent/30";
       case "en_revision":
         return "bg-amber-500/10 text-amber-400 border-amber-500/30";
       case "en_proceso":
-        return "bg-blue-500/10 text-blue-400 border-blue-500/30";
+        return "bg-accent-soft text-accent border-accent/30";
       case "resuelto":
         return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
       case "cerrado":
-        return "bg-slate-500/10 text-slate-400 border-slate-500/30";
+        return "bg-panel-3/10 text-muted border-[var(--line-strong)]/30";
     }
   };
 
@@ -96,19 +110,20 @@ export default function IncidentsPage() {
             <span className="font-mono text-xs font-semibold text-amber-400 uppercase tracking-wider">
               REGISTRO Y SEGUIMIENTO OPERATIVO
             </span>
-            <span className="text-xs text-slate-500">· {incidents.length} Registros Activos</span>
+            <span className="text-xs text-muted">· {incidents.length} Registros Activos</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
+          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
             CRM de Incidentes y Novedades
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted">
             Bitácora de eventos en el corredor escolar, intervenciones de guardia y mantenimiento
           </p>
         </div>
 
         <button
+          disabled={!canHandle}
           onClick={() => setIsNewModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+          className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
         >
           <Plus className="h-4 w-4" />
           <span>Reportar Incidente</span>
@@ -116,15 +131,15 @@ export default function IncidentsPage() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-[#0c101a] p-4">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-panel p-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar por código, escuela, descripción..."
-            className="w-full rounded-lg border border-white/[0.08] bg-[#070a12] py-2 pl-9 pr-4 text-xs text-slate-200 placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none"
+            className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] py-2 pl-9 pr-4 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
           />
         </div>
 
@@ -132,7 +147,7 @@ export default function IncidentsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-slate-300 focus:border-blue-500/50 focus:outline-none"
+            className="rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground/85 focus:border-accent/50 focus:outline-none"
           >
             <option value="all">Todos los Estados</option>
             <option value="nuevo">Nuevo</option>
@@ -145,7 +160,7 @@ export default function IncidentsPage() {
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-slate-300 focus:border-blue-500/50 focus:outline-none"
+            className="rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground/85 focus:border-accent/50 focus:outline-none"
           >
             <option value="all">Todas las Prioridades</option>
             <option value="critica">Crítica</option>
@@ -161,19 +176,19 @@ export default function IncidentsPage() {
         {filteredIncidents.map((inc) => (
           <div
             key={inc.id}
-            className="rounded-xl border border-white/[0.08] bg-[#0c101a] p-5 hover:border-white/[0.14] transition-all"
+            className="rounded-xl border border-[var(--line)] bg-panel p-5 hover:border-[var(--line-strong)] transition-all"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--line)] pb-3">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-xs font-bold text-blue-400">
+                <span className="font-mono text-xs font-bold text-accent">
                   {inc.code}
                 </span>
-                <span className="text-slate-600">|</span>
-                <span className="text-xs font-semibold text-white">
+                <span className="text-muted/60">|</span>
+                <span className="text-xs font-semibold text-foreground">
                   {inc.school_name}
                 </span>
                 {inc.camera_name && (
-                  <span className="text-[11px] text-slate-400 font-mono hidden md:inline">
+                  <span className="text-[11px] text-muted font-mono hidden md:inline">
                     ({inc.camera_name})
                   </span>
                 )}
@@ -190,6 +205,7 @@ export default function IncidentsPage() {
                 </span>
 
                 <button
+                  disabled={!canHandle}
                   onClick={() => cycleStatus(inc.id, inc.status)}
                   className={cn(
                     "rounded-full border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase transition-transform active:scale-95 cursor-pointer hover:brightness-125",
@@ -203,26 +219,26 @@ export default function IncidentsPage() {
             </div>
 
             <div className="mt-3">
-              <h3 className="text-sm font-semibold text-white">{inc.title}</h3>
-              <p className="mt-1 text-xs text-slate-300 leading-relaxed">
+              <h3 className="adm-title text-[13px] text-foreground">{inc.title}</h3>
+              <p className="mt-1 text-xs text-foreground/85 leading-relaxed">
                 {inc.description}
               </p>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-white/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-400">
+            <div className="mt-4 pt-3 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted">
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Asignado a: <strong className="text-slate-200">{inc.assigned_to}</strong></span>
+                  <User className="h-3.5 w-3.5 text-accent" />
+                  <span>Asignado a: <strong className="text-foreground">{inc.assigned_to}</strong></span>
                 </span>
-                <span className="flex items-center gap-1.5 font-mono text-[11px] text-slate-500">
+                <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted">
                   <Clock className="h-3.5 w-3.5" />
                   <span>{formatDate(inc.reported_at)}</span>
                 </span>
               </div>
 
               {inc.notes && (
-                <span className="text-[11px] italic text-slate-400">
+                <span className="text-[11px] italic text-muted">
                   Nota: {inc.notes}
                 </span>
               )}
@@ -231,7 +247,7 @@ export default function IncidentsPage() {
         ))}
 
         {filteredIncidents.length === 0 && (
-          <div className="py-12 text-center text-slate-500">
+          <div className="py-12 text-center text-muted">
             <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-xs font-semibold">No hay incidentes con los filtros seleccionados</p>
           </div>

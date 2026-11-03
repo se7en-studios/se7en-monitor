@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/lib/firebase/auth-context";
+import { archivo, chivoMono, serif, wide } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SE7EN MONITOR — Sistema de Monitoreo para Establecimientos Educativos",
+  title:
+    "SE7EN MONITOR — Sistema de Monitoreo para Establecimientos Educativos",
   description:
     "Plataforma inteligente de videovigilancia y corredores escolares cuidados para municipios e instituciones educativas.",
   icons: {
@@ -12,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#080b11",
+  themeColor: "#0b0b0c",
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
@@ -25,11 +28,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es" className="dark">
-      <body className="antialiased selection:bg-blue-600/30 selection:text-blue-200">
-        <AppShell>{children}</AppShell>
+    <html
+      lang="es"
+      className={`dark ${archivo.variable} ${chivoMono.variable} ${wide.variable} ${serif.variable}`}
+    >
+      <body className="antialiased">
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );
 }
-

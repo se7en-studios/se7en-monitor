@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { X, AlertTriangle, ShieldAlert, Clock, User } from "lucide-react";
 import { Incident, IncidentPriority, IncidentType } from "@/types/monitor";
-import { MOCK_SCHOOLS, MOCK_CAMERAS } from "@/data/mock-data";
+import { useCollection } from "@/lib/firebase/data";
+import type { School, Camera } from "@/types/monitor";
 
 interface NewIncidentModalProps {
   isOpen: boolean;
@@ -14,8 +15,12 @@ interface NewIncidentModalProps {
 export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncidentModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [schoolId, setSchoolId] = useState(MOCK_SCHOOLS[0].id);
-  const [cameraId, setCameraId] = useState(MOCK_CAMERAS[0].id);
+  const { data: schools } = useCollection<School>("schools");
+  const { data: cameras } = useCollection<Camera>("cameras");
+  const [pickedSchool, setSchoolId] = useState("");
+  const [pickedCamera, setCameraId] = useState("");
+  const schoolId = pickedSchool || schools[0]?.id || "";
+  const cameraId = pickedCamera || cameras[0]?.id || "";
   const [type, setType] = useState<IncidentType>("perimetro_vulnerable");
   const [priority, setPriority] = useState<IncidentPriority>("media");
   const [assignedTo, setAssignedTo] = useState("Guardia Urbana Catriel");
@@ -25,10 +30,10 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !description) return;
+    if (!title || !description || !schoolId) return;
 
-    const school = MOCK_SCHOOLS.find((s) => s.id === schoolId);
-    const camera = MOCK_CAMERAS.find((c) => c.id === cameraId);
+    const school = schools.find((s) => s.id === schoolId);
+    const camera = cameras.find((c) => c.id === cameraId);
 
     const newIncident: Incident = {
       id: "inc-" + Math.random().toString(36).substring(2, 7),
@@ -53,21 +58,21 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl border border-white/[0.12] bg-[#0c101a] p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--line-strong)] bg-panel p-6">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:bg-white/[0.08] hover:text-white"
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-muted hover:bg-white/[0.08] hover:text-foreground"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-3 border-b border-white/[0.06] pb-4">
+        <div className="flex items-center gap-3 border-b border-[var(--line)] pb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white">Reportar Incidente Escolar</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="adm-title text-[13px] text-foreground">Reportar Incidente Escolar</h3>
+            <p className="text-xs text-muted">
               Apertura de caso en el Corredor Escolar Cuidado de Catriel
             </p>
           </div>
@@ -76,13 +81,13 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
                 Prioridad
               </label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as IncidentPriority)}
-                className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
               >
                 <option value="baja">Baja</option>
                 <option value="media">Media</option>
@@ -91,13 +96,13 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
                 Tipo de Suceso
               </label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as IncidentType)}
-                className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
               >
                 <option value="perimetro_vulnerable">Perímetro Vulnerable</option>
                 <option value="persona_sospechosa">Persona Sospechosa en Vereda</option>
@@ -110,7 +115,7 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
           </div>
 
           <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
               Título del Incidente
             </label>
             <input
@@ -119,21 +124,21 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
               placeholder="ej: Vehículo detenido indebidamente sobre senda escolar"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
                 Escuela Afectada
               </label>
               <select
                 value={schoolId}
                 onChange={(e) => setSchoolId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
               >
-                {MOCK_SCHOOLS.map((s) => (
+                {schools.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -141,15 +146,15 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
                 Cámara Asociada
               </label>
               <select
                 value={cameraId}
                 onChange={(e) => setCameraId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white focus:border-blue-500/50 focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
               >
-                {MOCK_CAMERAS.map((c) => (
+                {cameras.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.identifier} - {c.name}
                   </option>
@@ -159,7 +164,7 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
           </div>
 
           <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
               Descripción y Circunstancias
             </label>
             <textarea
@@ -168,33 +173,33 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
               placeholder="Describa lo observado en la pantalla de monitoreo..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
               Asignar Guardia / Cuadrilla de Intervención
             </label>
             <input
               type="text"
               value={assignedTo}
               onChange={(e) => setAssignedTo(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/[0.08] bg-[#070a12] px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-white/[0.06]">
+          <div className="flex justify-end gap-3 pt-3 border-t border-[var(--line)]">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-white/[0.08] px-4 py-2 text-xs font-medium text-slate-300 hover:bg-white/[0.05]"
+              className="rounded-lg border border-[var(--line)] px-4 py-2 text-xs font-medium text-foreground/85 hover:bg-white/[0.05]"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 shadow-lg shadow-amber-600/20"
+              className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-foreground hover:bg-amber-500 shadow-amber-600/20"
             >
               Registrar y Notificar
             </button>
@@ -204,3 +209,4 @@ export function NewIncidentModal({ isOpen, onClose, onAddIncident }: NewIncident
     </div>
   );
 }
+

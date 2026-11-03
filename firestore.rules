@@ -1,64 +1,76 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Función auxiliar de autenticación
-    function isAuthenticated() {
-      return request.auth != null;
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
     }
-    
-    // Perfiles y Usuarios
+    // Usuario autenticado con perfil habilitado (cualquier rol)
+    function isStaff() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && myProfile().active == true;
+    }
+    function hasRole(roles) {
+      return isStaff() && myProfile().role in roles;
+    }
+    // Mantener sincronizado con lib/roles.ts
+    function isAdmin()    { return hasRole(['super_admin', 'municipal_admin']); }
+    function isOperator() { return hasRole(['super_admin', 'municipal_admin', 'monitoring_operator']); }
+
+    // Cada usuario lee su propio perfil; solo el Super Admin lista y escribe perfiles.
     match /profiles/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || hasRole(['super_admin']));
+      allow write: if hasRole(['super_admin']);
     }
-    
-    // Escuelas y Establecimientos
-    match /schools/{schoolId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+
+    match /schools/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /cameras/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /incidents/{id} { allow read: if isStaff(); allow write: if isOperator(); }
+    match /alerts/{id}    { allow read: if isStaff(); allow write: if isOperator(); }
+    match /maintenance_tickets/{id} {
+      allow read: if isStaff();
+      allow write: if hasRole(['super_admin', 'municipal_admin', 'maintenance_tech']);
     }
-    
-    // Dispositivos y Cámaras
-    match /cameras/{cameraId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+
+    // Marco operativo que define el Municipio: lo lee todo el personal, lo edita el Super Admin.
+    match /settings/{id} {
+      allow read: if isStaff();
+      allow write: if hasRole(['super_admin']);
     }
-    
-    // Sesiones de Señalización WebRTC para Celulares (Punto a Punto)
-    // Permite al emisor móvil (que puede ingresar mediante token único sin login previo) 
-    // negociar SDP Offer / Answer y candidatos ICE con el operador del Dashboard.
+
+    // Quién accedió a qué: cada persona solo puede registrar sus propios accesos,
+    // lo lee la administración y nadie lo modifica ni lo borra.
+    match /access_logs/{id} {
+      allow create: if isStaff() && request.resource.data.actor_uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Bitácora inmutable
+    match /activity_logs/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // Vinculación de celulares. El token (UUID impredecible) es el id del documento y
+    // es la credencial del celular, que transmite sin login. Solo la administración
+    // los crea y los revoca; vencen solos (expires_at).
+    match /pairings/{token} {
+      allow read, write: if isAdmin();
+    }
+
+    // Señalización WebRTC: solo se acepta para sesiones cuyo token tiene una vinculación
+    // vigente. Se permite leer un documento por id, pero no listar sesiones. Sin `get()`
+    // sobre una vinculación inexistente o vencida, la regla falla y se deniega.
+    function pairingValid(token) {
+      return get(/databases/$(database)/documents/pairings/$(token)).data.expires_at > request.time;
+    }
     match /camera_sessions/{sessionId} {
-      allow read, write: if true;
-      
-      match /callerCandidates/{candidateId} {
-        allow read, write: if true;
-      }
-      match /calleeCandidates/{candidateId} {
-        allow read, write: if true;
-      }
-    }
-    
-    // Incidentes y Alertas
-    match /incidents/{incidentId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    match /alerts/{alertId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // Mantenimiento y Cuadrillas
-    match /maintenance_tickets/{ticketId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // Auditoría inmutable de actividades
-    match /activity_logs/{logId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if false; // Solo inserción, inmutable
+      allow get, create, update, delete: if pairingValid(sessionId);
+      match /callerCandidates/{id} { allow read, write: if pairingValid(sessionId); }
+      match /calleeCandidates/{id} { allow read, write: if pairingValid(sessionId); }
     }
   }
 }
-

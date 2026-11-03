@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Grid2X2,
   Grid3X3,
@@ -15,13 +15,15 @@ import {
   Shield,
   RefreshCw,
 } from "lucide-react";
-import { MOCK_CAMERAS } from "@/data/mock-data";
+import { useCollection, byId } from "@/lib/firebase/data";
+import { useAuth } from "@/lib/firebase/auth-context";
+import { logAccess } from "@/lib/firebase/audit";
 import { StatusBadge } from "@/components/status-badge";
 import { ConnectMobileModal } from "@/components/connect-mobile-modal";
 import { WebRTCReceiverTile } from "@/components/webrtc-receiver-tile";
 import { CameraFullscreenModal } from "@/components/camera-fullscreen-modal";
 import { Camera } from "@/types/monitor";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeAgo } from "@/lib/utils";
 
 export default function LiveMonitoringPage() {
   const [gridLayout, setGridLayout] = useState<"1x1" | "2x2" | "3x3">("2x2");
@@ -29,12 +31,25 @@ export default function LiveMonitoringPage() {
   const [fullscreenCamera, setFullscreenCamera] = useState<Camera | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
+  const { data: cameras } = useCollection<Camera>("cameras", byId);
+  const { profile } = useAuth();
+
+  // Entrar al monitoreo en vivo queda registrado (una vez por visita a la pantalla).
+  useEffect(() => {
+    if (!profile) return;
+    void logAccess(
+      { action: "ver_monitoreo_en_vivo" },
+      { name: profile.full_name, role: profile.role }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
   const displayedCameras =
     gridLayout === "1x1"
-      ? MOCK_CAMERAS.slice(0, 1)
+      ? cameras.slice(0, 1)
       : gridLayout === "2x2"
-      ? MOCK_CAMERAS.slice(0, 4)
-      : MOCK_CAMERAS.slice(0, 9);
+      ? cameras.slice(0, 4)
+      : cameras.slice(0, 9);
 
   return (
     <div className="space-y-6">
@@ -47,10 +62,10 @@ export default function LiveMonitoringPage() {
               CENTRO DE MONITOREO EN TIEMPO REAL
             </span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">
+          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
             Monitoreo en Vivo — Corredor Escolar
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted">
             Transmisiones WebRTC activas y telemetría de accesos escolares de Catriel
           </p>
         </div>
@@ -62,8 +77,8 @@ export default function LiveMonitoringPage() {
             className={cn(
               "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               isMuted
-                ? "border-white/[0.08] bg-[#0e131f] text-slate-400 hover:text-white"
-                : "border-blue-500/30 bg-blue-600/20 text-blue-400"
+                ? "border-[var(--line)] bg-panel text-muted hover:text-foreground"
+                : "border-accent/30 bg-accent/20 text-accent"
             )}
             title="Audio silenciado por defecto por directiva de privacidad"
           >
@@ -74,14 +89,14 @@ export default function LiveMonitoringPage() {
           </button>
 
           {/* Grid Layout Switcher */}
-          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#0e131f] p-1">
+          <div className="flex items-center rounded-lg border border-[var(--line)] bg-panel p-1">
             <button
               onClick={() => setGridLayout("1x1")}
               className={cn(
                 "rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
                 gridLayout === "1x1"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-accent text-background"
+                  : "text-muted hover:text-foreground"
               )}
             >
               1x1
@@ -91,8 +106,8 @@ export default function LiveMonitoringPage() {
               className={cn(
                 "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
                 gridLayout === "2x2"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-accent text-background"
+                  : "text-muted hover:text-foreground"
               )}
             >
               <Grid2X2 className="h-3.5 w-3.5" />
@@ -103,8 +118,8 @@ export default function LiveMonitoringPage() {
               className={cn(
                 "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-mono font-medium transition-colors",
                 gridLayout === "3x3"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-accent text-background"
+                  : "text-muted hover:text-foreground"
               )}
             >
               <Grid3X3 className="h-3.5 w-3.5" />
@@ -115,7 +130,7 @@ export default function LiveMonitoringPage() {
           {/* Quick Mobile Broadcaster Button */}
           <button
             onClick={() => setIsConnectModalOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+            className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
           >
             <Smartphone className="h-4 w-4" />
             <span className="hidden md:inline">Transmitir Celular</span>
@@ -138,16 +153,16 @@ export default function LiveMonitoringPage() {
           return (
             <div
               key={cam.id}
-              className="group relative flex flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#0c101a] shadow-lg transition-all hover:border-white/[0.18]"
+              className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-panel transition-all hover:border-[var(--line-strong)]"
             >
               {/* Camera Header Bar */}
-              <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#080c14] px-4 py-2.5 text-xs">
+              <div className="flex items-center justify-between border-b border-[var(--line)] bg-background px-4 py-2.5 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-white text-xs">
+                  <span className="font-mono font-bold text-foreground text-xs">
                     {cam.identifier}
                   </span>
-                  <span className="text-slate-500">|</span>
-                  <span className="text-slate-300 font-medium truncate max-w-[150px]">
+                  <span className="text-muted">|</span>
+                  <span className="text-foreground/85 font-medium truncate max-w-[150px]">
                     {cam.name}
                   </span>
                 </div>
@@ -166,25 +181,27 @@ export default function LiveMonitoringPage() {
               {/* Video Frame Container */}
               {isMobileDevice ? (
                 <WebRTCReceiverTile
-                  token={cam.publish_token || "demo-mobile-token-se7en"}
+                  token={cam.publish_token ?? ""}
                   onOpenPairModal={() => setIsConnectModalOpen(true)}
                   isMuted={isMuted}
                 />
               ) : (
-                <div className="relative aspect-video w-full bg-[#05080e] flex items-center justify-center overflow-hidden">
+                <div className="relative aspect-video w-full bg-background flex items-center justify-center overflow-hidden">
                   {cam.status === "offline" ? (
-                    <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center p-6 text-center text-muted">
                       <VideoOff className="h-8 w-8 text-rose-500/60 mb-2" />
                       <p className="text-xs font-semibold text-rose-400">
                         Cámara Sin Señal de Red
                       </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        Último ping registrado: hace 2 horas
+                      <p className="text-[10px] text-muted mt-0.5">
+                        {cam.last_heartbeat
+                          ? `Última señal: ${formatTimeAgo(cam.last_heartbeat)}`
+                          : "Todavía no transmitió"}
                       </p>
                     </div>
                   ) : (
-                    <div className="relative h-full w-full bg-gradient-to-b from-[#0e1627] to-[#080d17] p-4 flex flex-col justify-between">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
+                    <div className="relative h-full w-full bg-panel p-4 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-muted bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
                         <span className="text-emerald-400">{cam.school_name}</span>
                         <span>{cam.resolution} · {cam.fps} FPS</span>
                       </div>
@@ -193,15 +210,15 @@ export default function LiveMonitoringPage() {
                         <div className="h-10 w-10 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400">
                           <Video className="h-5 w-5" />
                         </div>
-                        <p className="mt-2 text-xs font-medium text-slate-300">
+                        <p className="mt-2 text-xs font-medium text-foreground/85">
                           {cam.location_detail}
                         </p>
-                        <p className="text-[10px] font-mono text-slate-500">
+                        <p className="text-[10px] font-mono text-muted">
                           Canal Seguro RTSP/WebRTC Encriptado
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
+                      <div className="flex items-center justify-between text-[9px] font-mono text-muted bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded">
                         <span>IP: {cam.ip_address || "DHCP Dinámico"}</span>
                         <span className="text-emerald-400">LATENCIA: 42ms</span>
                       </div>
@@ -211,15 +228,15 @@ export default function LiveMonitoringPage() {
               )}
 
               {/* Card Footer */}
-              <div className="flex items-center justify-between bg-[#080c14] px-4 py-2 border-t border-white/[0.04] text-[11px] text-slate-400">
+              <div className="flex items-center justify-between bg-background px-4 py-2 border-t border-[var(--line)] text-[11px] text-muted">
                 <span className="truncate">{cam.school_name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-slate-500">
+                  <span className="font-mono text-[10px] text-muted">
                     Radio 200m
                   </span>
                   <button
                     onClick={() => setFullscreenCamera(cam)}
-                    className="rounded p-1 text-slate-400 hover:bg-white/[0.08] hover:text-white transition-colors"
+                    className="rounded p-1 text-muted hover:bg-white/[0.08] hover:text-foreground transition-colors"
                     title="Maximizar en modo teatro / PTZ"
                   >
                     <Maximize2 className="h-3.5 w-3.5" />
@@ -232,14 +249,14 @@ export default function LiveMonitoringPage() {
       </div>
 
       {/* Security Statement */}
-      <div className="rounded-xl border border-white/[0.06] bg-[#0c101a] p-4 text-xs text-slate-400 flex items-center justify-between">
+      <div className="rounded-xl border border-[var(--line)] bg-panel p-4 text-xs text-muted flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <Shield className="h-4 w-4 text-blue-400 shrink-0" />
+          <Shield className="h-4 w-4 text-accent shrink-0" />
           <span>
             Transmisiones encriptadas WebRTC punto a punto. Prohibida la redistribución pública según directivas de protección a la niñez y normativas de seguridad escolar de Catriel.
           </span>
         </div>
-        <span className="font-mono text-[11px] text-slate-500 hidden sm:inline">
+        <span className="font-mono text-[11px] text-muted hidden sm:inline">
           Catriel Seguro 2026
         </span>
       </div>

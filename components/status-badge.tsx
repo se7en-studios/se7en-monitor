@@ -35,18 +35,18 @@ export function StatusBadge({ status, size = "md", showDot = true }: StatusBadge
     },
     mantenimiento: {
       label: "MANTENIMIENTO",
-      bg: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-      dot: "bg-blue-400",
+      bg: "bg-accent-soft text-accent border-accent/20",
+      dot: "bg-accent",
     },
     en_obra: {
       label: "EN OBRA",
-      bg: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+      bg: "bg-accent-soft text-accent border-accent/20",
       dot: "bg-indigo-400",
     },
   }[status] || {
     label: status.toUpperCase(),
-    bg: "bg-slate-500/10 text-slate-400 border-slate-500/20",
-    dot: "bg-slate-400",
+    bg: "bg-panel-3/10 text-muted border-[var(--line-strong)]/20",
+    dot: "bg-panel-3",
   };
 
   return (

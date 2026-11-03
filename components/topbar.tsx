@@ -1,15 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Search,
-  Bell,
-  Smartphone,
-  Shield,
-  Clock,
-  Sparkles,
-  ChevronDown,
-} from "lucide-react";
+import { Search, Smartphone, Shield, Clock } from "lucide-react";
 import { ConnectMobileModal } from "./connect-mobile-modal";
 
 interface TopbarProps {
@@ -21,16 +13,14 @@ export function Topbar({ onOpenCommandMenu }: TopbarProps) {
   const [time, setTime] = useState("");
 
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
+    const updateTime = () =>
       setTime(
-        now.toLocaleTimeString("es-AR", {
+        new Date().toLocaleTimeString("es-AR", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
-        })
+        }),
       );
-    };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
@@ -38,63 +28,38 @@ export function Topbar({ onOpenCommandMenu }: TopbarProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-white/[0.08] bg-[#070a12]/90 px-6 backdrop-blur-md">
-        {/* Search bar with Ctrl+K shortcut */}
-        <div className="flex items-center gap-4 flex-1 max-w-md">
-          <button
-            onClick={onOpenCommandMenu}
-            className="group relative flex w-full items-center justify-between rounded-full border border-white/[0.08] bg-[#0d121f] py-1.5 pl-9 pr-3 text-xs text-slate-400 hover:border-blue-500/40 hover:text-slate-200 transition-colors"
-          >
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 group-hover:text-blue-400" />
-            <span className="truncate">Buscar escuelas, cámaras por ID o incidentes...</span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-              Ctrl+K
-            </kbd>
-          </button>
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between gap-4 border-b border-[var(--line)] bg-background/90 px-6 backdrop-blur">
+        <button
+          onClick={onOpenCommandMenu}
+          className="focus-ring group relative flex w-full max-w-md items-center justify-between rounded-full border border-[var(--line)] bg-panel py-2 pl-9 pr-3 text-[13px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-foreground"
+        >
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+          <span className="truncate">
+            Buscar escuelas, cámaras o incidentes…
+          </span>
+          <kbd className="hidden items-center rounded-full border border-[var(--line)] px-2 py-0.5 font-mono text-[10px] text-muted sm:inline-flex">
+            Ctrl K
+          </kbd>
+        </button>
+
+        <div className="adm-label hidden items-center gap-2 lg:flex">
+          <Shield className="h-3.5 w-3.5 text-accent" />
+          <span>Centro de Monitoreo Urbano · Catriel</span>
         </div>
 
-        {/* Center / Jurisdiction badge */}
-        <div className="hidden lg:flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs">
-          <Shield className="h-3.5 w-3.5 text-blue-400" />
-          <span className="font-semibold text-blue-300">Centro de Monitoreo Urbano</span>
-          <span className="text-slate-500">·</span>
-          <span className="text-slate-400">Municipio de Catriel</span>
-        </div>
-
-        {/* Right side controls */}
         <div className="flex items-center gap-3">
-          {/* Clock */}
-          <div className="hidden sm:flex items-center gap-1.5 font-mono text-xs text-slate-400 border border-white/[0.06] bg-[#0d121f] px-3 py-1.5 rounded-lg">
-            <Clock className="h-3.5 w-3.5 text-slate-500" />
+          <div className="hidden items-center gap-1.5 rounded-full border border-[var(--line)] bg-panel px-3 py-1.5 font-mono text-xs text-muted sm:flex">
+            <Clock className="h-3.5 w-3.5" />
             <span>{time || "--:--:--"}</span>
           </div>
 
-          {/* Quick Connect Mobile Button */}
           <button
             onClick={() => setIsConnectOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 transition-all hover:shadow-blue-600/40"
+            className="focus-ring inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-[13px] font-semibold text-background transition-colors hover:bg-foreground"
           >
             <Smartphone className="h-4 w-4" />
-            <span className="hidden sm:inline">Conectar Celular</span>
+            <span className="hidden sm:inline">Conectar celular</span>
           </button>
-
-          {/* Demo Data Pill */}
-          <div className="hidden md:flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono text-amber-400">
-            <Sparkles className="h-3 w-3" />
-            <span>DEMO V1</span>
-          </div>
-
-          {/* User profile menu */}
-          <div className="flex items-center gap-2.5 pl-2 border-l border-white/[0.08]">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 font-bold text-xs text-white shadow-inner">
-              OP
-            </div>
-            <div className="hidden sm:block text-left leading-tight">
-              <p className="text-xs font-semibold text-white">Operador Sala 1</p>
-              <p className="text-[10px] text-slate-400">Super Admin</p>
-            </div>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-          </div>
         </div>
       </header>
 
