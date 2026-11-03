@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X, School, MapPin, Phone, Mail, User, ShieldCheck } from "lucide-react";
+import { X, School, ShieldCheck, Loader2 } from "lucide-react";
+import { newId } from "@/lib/firebase/data";
+import { describeError } from "@/components/toast";
 import {
   School as SchoolType,
   EducationalLevel,
@@ -11,10 +13,21 @@ import {
 interface AddSchoolModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSchool: (school: SchoolType) => void;
+  /** Si devuelve una promesa, el modal espera, muestra el error si falla y no se cierra. */
+  onAddSchool: (school: SchoolType) => void | Promise<void>;
 }
 
-export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalProps) {
+const parseCoord = (s: string) => Number.parseFloat(s.replace(",", "."));
+
+export function AddSchoolModal({
+  isOpen,
+  onClose,
+  onAddSchool,
+}: AddSchoolModalProps) {
+  const [latText, setLatText] = useState("");
+  const [lngText, setLngText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -27,33 +40,57 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const lat = parseCoord(latText);
+  const lng = parseCoord(lngText);
+  const hasCoords =
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !code || !address) return;
+    if (!code.trim() || !name.trim() || !address.trim())
+      return setError("Completá código, nombre y dirección.");
+    // La ubicación define el corredor de 200 m: no se puede inventar.
+    if (!hasCoords)
+      return setError(
+        "Cargá la ubicación real de la escuela (latitud y longitud).",
+      );
+    if (busy) return;
 
     const newSchool: SchoolType = {
-      id: "sch-" + Math.random().toString(36).substring(2, 7),
-      code,
-      name,
-      address,
-      neighborhood,
+      id: newId("sch"),
+      code: code.trim().toUpperCase(),
+      name: name.trim(),
+      address: address.trim(),
+      neighborhood: neighborhood.trim(),
       city: "Catriel",
       province: "Río Negro",
-      lat: -37.8812 + (Math.random() - 0.5) * 0.01,
-      lng: -67.7955 + (Math.random() - 0.5) * 0.01,
+      lat,
+      lng,
       educational_level: level,
       management,
-      principal_name: principalName || "A designar",
-      phone: phone || "(0299) 491-0000",
-      email: email || `${code.toLowerCase()}@educacion.rn.gov.ar`,
+      principal_name: principalName.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
       perimeter_radius_meters: 200,
       cameras_count: 0,
       status: "operativo",
       created_at: new Date().toISOString(),
     };
 
-    onAddSchool(newSchool);
-    onClose();
+    setBusy(true);
+    setError(null);
+    try {
+      await onAddSchool(newSchool);
+      onClose();
+    } catch (err) {
+      console.error("[escuelas] alta", err);
+      setError(describeError(err, "No se pudo registrar la escuela."));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -71,14 +108,17 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
             <School className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="adm-title text-[13px] text-foreground">Registrar Establecimiento Educativo</h3>
+            <h3 className="adm-title text-[13px] text-foreground">
+              Registrar Establecimiento Educativo
+            </h3>
             <p className="text-xs text-muted">
-              Incorporación al programa de Corredor Escolar Cuidado de Catriel (Radio 200m)
+              Incorporación al programa de Corredor Escolar Cuidado de Catriel
+              (Radio 200m)
             </p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-mono uppercase tracking-wider text-muted">
@@ -117,7 +157,9 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
             </label>
             <select
               value={management}
-              onChange={(e) => setManagement(e.target.value as SchoolManagement)}
+              onChange={(e) =>
+                setManagement(e.target.value as SchoolManagement)
+              }
               className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground focus:border-accent/50 focus:outline-none"
             >
               <option value="estatal">Estatal (pública)</option>
@@ -194,9 +236,73 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="as-lat"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
+                Latitud
+              </label>
+              <input
+                id="as-lat"
+                inputMode="decimal"
+                placeholder="-37.8785"
+                value={latText}
+                onChange={(e) => setLatText(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="as-lng"
+                className="text-[11px] font-mono uppercase tracking-wider text-muted"
+              >
+                Longitud
+              </label>
+              <input
+                id="as-lng"
+                inputMode="decimal"
+                placeholder="-67.7955"
+                value={lngText}
+                onChange={(e) => setLngText(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+              />
+            </div>
+          </div>
+          <p className="-mt-2 text-[11px] text-muted">
+            Tip: en Google Maps, mantené apretado sobre la escuela y copiá las
+            coordenadas.
+          </p>
+
+          <div>
+            <label
+              htmlFor="as-email"
+              className="text-[11px] font-mono uppercase tracking-wider text-muted"
+            >
+              Email institucional (opcional)
+            </label>
+            <input
+              id="as-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
+            />
+          </div>
+
+          {error && (
+            <p role="alert" className="text-[13px] text-red-400">
+              {error}
+            </p>
+          )}
+
           <div className="rounded-xl border border-accent/20 bg-accent-soft p-3 text-xs text-foreground/85 flex items-center gap-2.5">
             <ShieldCheck className="h-4 w-4 text-accent shrink-0" />
-            <span>Radio perimetral legal asignado automáticamente a <strong>200 metros</strong>.</span>
+            <span>
+              Radio perimetral legal asignado automáticamente a{" "}
+              <strong>200 metros</strong>.
+            </span>
           </div>
 
           <div className="flex justify-end gap-3 pt-3 border-t border-[var(--line)]">
@@ -209,9 +315,11 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
             </button>
             <button
               type="submit"
-              className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)]"
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] disabled:opacity-50"
             >
-              Dar de Alta Escuela
+              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Dar de alta la escuela
             </button>
           </div>
         </form>
@@ -219,4 +327,3 @@ export function AddSchoolModal({ isOpen, onClose, onAddSchool }: AddSchoolModalP
     </div>
   );
 }
-

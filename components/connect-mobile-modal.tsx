@@ -23,6 +23,7 @@ import {
   type Pairing,
 } from "@/lib/firebase/pairing";
 import { can } from "@/lib/roles";
+import { describeError, useToast } from "@/components/toast";
 import type { Camera } from "@/types/monitor";
 
 interface ConnectMobileModalProps {
@@ -34,7 +35,10 @@ interface ConnectMobileModalProps {
 const DEV_LAN_HOST = "192.168.18.12";
 
 // Dirección https desde la que el celular abre la consola transmisora (sin barra final).
-const CONFIGURED_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+const CONFIGURED_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(
+  /\/+$/,
+  "",
+);
 const PUBLIC_BASE = CONFIGURED_URL.startsWith("https://") ? CONFIGURED_URL : "";
 
 export function ConnectMobileModal({
@@ -42,6 +46,7 @@ export function ConnectMobileModal({
   onClose,
 }: ConnectMobileModalProps) {
   const { profile, user } = useAuth();
+  const toast = useToast();
   const { data: cameras } = useCollection<Camera>("cameras");
   const mobileCameras = useMemo(
     () => cameras.filter((c) => c.device_type === "mobile_webrtc"),
@@ -109,6 +114,7 @@ export function ConnectMobileModal({
     setError(null);
     try {
       setPairing(await createPairing(camera, user.uid));
+      toast.success(`Enlace generado para ${camera.identifier}`);
       void logAccess(
         {
           action: "vincular_celular",
@@ -120,7 +126,7 @@ export function ConnectMobileModal({
       );
     } catch (err) {
       console.error("[pairing]", err);
-      setError("No se pudo generar el enlace. Revisá tus permisos.");
+      setError(describeError(err, "No se pudo generar el enlace."));
     } finally {
       setBusy(false);
     }
@@ -133,7 +139,9 @@ export function ConnectMobileModal({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // El portapapeles solo existe en https o localhost: el campo es seleccionable.
-      setError("Este navegador no permite copiar desde esta dirección. Seleccioná el enlace y copialo a mano.");
+      setError(
+        "Este navegador no permite copiar desde esta dirección. Seleccioná el enlace y copialo a mano.",
+      );
     }
   };
 
@@ -231,6 +239,18 @@ export function ConnectMobileModal({
                     {pairing.expiresAt.toLocaleDateString("es-AR")}) y funciona
                     para esta cámara.
                   </p>
+
+                  {mobileUrl.startsWith("http://") && (
+                    <p
+                      role="alert"
+                      className="mt-3 max-w-xs text-[12px] leading-relaxed text-amber-300"
+                    >
+                      Este enlace no es https: la mayoría de los celulares no
+                      van a permitir la cámara. Configurá NEXT_PUBLIC_APP_URL
+                      con la dirección https del sistema y generá el enlace de
+                      nuevo.
+                    </p>
+                  )}
 
                   {!PUBLIC_BASE &&
                     typeof window !== "undefined" &&

@@ -7,18 +7,32 @@ import { useCollection, byNewest } from "@/lib/firebase/data";
 import { can, ROLE_LABELS, type Role } from "@/lib/roles";
 import { ACCESS_ACTION_LABELS } from "@/lib/audit-labels";
 import type { AccessAction, AccessLog } from "@/types/monitor";
+import { btnSecondary } from "@/components/ui";
 
 const sortLogs = byNewest("at");
+/** Se traen los últimos N registros; «Cargar más» suma otra tanda. */
+const PAGE_SIZE = 500;
 const SELECT =
   "focus-ring rounded-full border border-[var(--line)] bg-panel px-3 py-2 text-[13px] text-foreground";
 
 const formatAt = (iso: string) =>
-  new Date(iso).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" });
+  new Date(iso).toLocaleString("es-AR", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
 
 const csvCell = (v: string) => `"${v.replaceAll('"', '""')}"`;
 
 function exportCsv(rows: AccessLog[]) {
-  const header = ["Fecha", "Persona", "Email", "Rol", "Acción", "Cámara", "Escuela"];
+  const header = [
+    "Fecha",
+    "Persona",
+    "Email",
+    "Rol",
+    "Acción",
+    "Cámara",
+    "Escuela",
+  ];
   const lines = rows.map((r) =>
     [
       formatAt(r.at),
@@ -30,11 +44,14 @@ function exportCsv(rows: AccessLog[]) {
       r.school_name ?? "",
     ]
       .map(csvCell)
-      .join(",")
+      .join(","),
   );
-  const blob = new Blob(["﻿" + [header.map(csvCell).join(","), ...lines].join("\n")], {
-    type: "text/csv;charset=utf-8",
-  });
+  const blob = new Blob(
+    ["﻿" + [header.map(csvCell).join(","), ...lines].join("\n")],
+    {
+      type: "text/csv;charset=utf-8",
+    },
+  );
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -45,20 +62,31 @@ function exportCsv(rows: AccessLog[]) {
 
 export default function AuditPage() {
   const { profile } = useAuth();
-  const { data: logs, loading, error } = useCollection<AccessLog>("access_logs", sortLogs);
+  const [max, setMax] = useState(PAGE_SIZE);
+  const {
+    data: logs,
+    loading,
+    error,
+    hasMore,
+  } = useCollection<AccessLog>("access_logs", sortLogs, {
+    orderByField: "at",
+    limit: max,
+  });
   const [action, setAction] = useState<AccessAction | "all">("all");
   const [person, setPerson] = useState("all");
 
   const people = useMemo(
     () => [...new Set(logs.map((l) => l.actor_email))].sort(),
-    [logs]
+    [logs],
   );
   const filtered = useMemo(
     () =>
       logs.filter(
-        (l) => (action === "all" || l.action === action) && (person === "all" || l.actor_email === person)
+        (l) =>
+          (action === "all" || l.action === action) &&
+          (person === "all" || l.actor_email === person),
       ),
-    [logs, action, person]
+    [logs, action, person],
   );
 
   if (!can.viewAudit(profile?.role)) {
@@ -78,7 +106,8 @@ export default function AuditPage() {
             Auditoría de <span className="adm-serif">accesos</span>
           </h1>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
-            Quién ingresó al sistema y qué cámaras vio. El registro no se puede editar ni borrar.
+            Quién ingresó al sistema y qué cámaras vio. El registro no se puede
+            editar ni borrar.
           </p>
         </div>
         <button
@@ -117,10 +146,17 @@ export default function AuditPage() {
             </option>
           ))}
         </select>
-        <span className="adm-label self-center">{filtered.length} registros</span>
+        <span className="adm-label self-center">
+          {filtered.length} registros
+          {hasMore && ` · de los últimos ${logs.length}`}
+        </span>
       </div>
 
-      {error && <p className="text-xs text-red-400">No se pudo cargar la auditoría: {error}</p>}
+      {error && (
+        <p className="text-xs text-red-400">
+          No se pudo cargar la auditoría: {error}
+        </p>
+      )}
 
       <div className="adm-in overflow-x-auto rounded-xl border border-[var(--line)] bg-panel">
         <table className="w-full border-collapse text-left">
@@ -143,7 +179,9 @@ export default function AuditPage() {
             {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-muted">
-                  Todavía no hay accesos registrados.
+                  {logs.length
+                    ? "No hay registros con estos filtros."
+                    : "Todavía no hay accesos registrados."}
                 </td>
               </tr>
             )}
@@ -153,7 +191,9 @@ export default function AuditPage() {
                   {formatAt(l.at)}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="block font-medium text-foreground">{l.actor_name}</span>
+                  <span className="block font-medium text-foreground">
+                    {l.actor_name}
+                  </span>
                   <span className="block text-[11px] text-muted">
                     {ROLE_LABELS[l.actor_role as Role] ?? l.actor_role}
                   </span>
@@ -162,13 +202,27 @@ export default function AuditPage() {
                   {ACCESS_ACTION_LABELS[l.action] ?? l.action}
                 </td>
                 <td className="px-4 py-3 text-muted">
-                  {l.camera_name ? `${l.camera_name} · ${l.school_name ?? ""}` : "—"}
+                  {l.camera_name
+                    ? `${l.camera_name} · ${l.school_name ?? ""}`
+                    : "—"}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            className={btnSecondary}
+            disabled={loading}
+            onClick={() => setMax((m) => m + PAGE_SIZE)}
+          >
+            Cargar más registros
+          </button>
+        </div>
+      )}
     </div>
   );
 }

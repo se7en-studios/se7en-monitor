@@ -1,263 +1,216 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
-import { useCollection, saveDoc, patchDoc, logActivity, byNewest } from "@/lib/firebase/data";
+import {
+  byNewest,
+  currentActor,
+  logActivity,
+  patchDoc,
+  saveDoc,
+  useCollection,
+} from "@/lib/firebase/data";
 import { can } from "@/lib/roles";
 import {
-  AlertTriangle,
-  Search,
-  Plus,
-  Clock,
-  Shield,
-  CheckCircle,
-  FileText,
-  User,
-  Filter,
-  CheckCircle2,
-} from "lucide-react";
-import { Incident, IncidentStatus, IncidentPriority } from "@/types/monitor";
+  INCIDENT_PRIORITY_LABELS,
+  INCIDENT_STATUS_LABELS,
+  isOpenIncident,
+} from "@/lib/incident-labels";
+import type {
+  Incident,
+  IncidentPriority,
+  IncidentStatus,
+} from "@/types/monitor";
 import { NewIncidentModal } from "@/components/new-incident-modal";
-import { formatDate } from "@/lib/utils";
+import { describeError, useToast } from "@/components/toast";
+import {
+  EmptyState,
+  PageHeader,
+  Skeleton,
+  btnPrimary,
+  input,
+  searchInput,
+} from "@/components/ui";
+import { IncidentCard } from "./incident-card";
 import { cn } from "@/lib/utils";
 
 const sortIncidents = byNewest("reported_at");
+const norm = (s: string | undefined) => (s ?? "").toLowerCase();
+
+function matches(inc: Incident, term: string): boolean {
+  const t = term.trim().toLowerCase();
+  if (!t) return true;
+  return [
+    inc.code,
+    inc.title,
+    inc.school_name,
+    inc.description,
+    inc.assigned_to,
+    inc.camera_name,
+  ].some((v) => norm(v).includes(t));
+}
+
+/** Cambio de estado con quién y cuándo. Al resolver/cerrar se fija `resolved_at`; al reabrir se limpia. */
+function statusPatch(
+  inc: Incident,
+  status: IncidentStatus,
+): Record<string, unknown> {
+  const now = new Date().toISOString();
+  const resolved_at = isOpenIncident(status) ? null : (inc.resolved_at ?? now);
+  return { status, resolved_at, updated_at: now, updated_by: currentActor() };
+}
 
 export default function IncidentsPage() {
   const { profile } = useAuth();
+  const toast = useToast();
   const canHandle = can.handleIncidents(profile?.role);
-  const { data: incidents } = useCollection<Incident>("incidents", sortIncidents);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const { data: incidents, loading } = useCollection<Incident>(
+    "incidents",
+    sortIncidents,
+  );
+  const [term, setTerm] = useState("");
+  const [status, setStatus] = useState<IncidentStatus | "open" | "all">("open");
+  const [priority, setPriority] = useState<IncidentPriority | "all">("all");
+  const [isNewOpen, setIsNewOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const filteredIncidents = incidents.filter((inc) => {
-    const matchesSearch =
-      inc.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inc.school_name && inc.school_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      inc.description.toLowerCase().includes(searchTerm.toLowerCase());
+  const filtered = incidents.filter(
+    (inc) =>
+      matches(inc, term) &&
+      (status === "all" ||
+        (status === "open"
+          ? isOpenIncident(inc.status)
+          : inc.status === status)) &&
+      (priority === "all" || inc.priority === priority),
+  );
 
-    const matchesStatus = statusFilter === "all" || inc.status === statusFilter;
-    const matchesPriority = priorityFilter === "all" || inc.priority === priorityFilter;
+  const addIncident = async (inc: Incident) => {
+    await saveDoc("incidents", inc);
+    toast.success(`Incidente ${inc.code} reportado`);
+    void logActivity({
+      event_type: "incident_created",
+      title: "Incidente reportado",
+      description: `${inc.code} · ${inc.title}`,
+      entity_type: "incident",
+      entity_id: inc.id,
+    });
+  };
 
-    return matchesSearch && matchesStatus && matchesPriority;
-  });
-
-  const handleAddIncident = (newInc: Incident) => {
-    saveDoc("incidents", newInc)
-      .then(() =>
-        logActivity({
-          event_type: "incident_created",
-          title: "Incidente reportado",
-          description: `${newInc.code} · ${newInc.title}`,
+  const changeStatus = async (inc: Incident, next: IncidentStatus) => {
+    setBusyId(inc.id);
+    try {
+      await patchDoc("incidents", inc.id, statusPatch(inc, next));
+      toast.success(`${inc.code}: ${INCIDENT_STATUS_LABELS[next]}`);
+      if (next === "resuelto")
+        void logActivity({
+          event_type: "incident_resolved",
+          title: "Incidente resuelto",
+          description: `${inc.code} · ${inc.title}`,
           entity_type: "incident",
-          entity_id: newInc.id,
-        })
-      )
-      .catch((err) => console.error("[incidents]", err));
-  };
-
-  const cycleStatus = (id: string, currentStatus: IncidentStatus) => {
-    const nextStatusMap: Record<IncidentStatus, IncidentStatus> = {
-      nuevo: "en_revision",
-      en_revision: "en_proceso",
-      en_proceso: "resuelto",
-      resuelto: "cerrado",
-      cerrado: "nuevo",
-    };
-
-    patchDoc("incidents", id, { status: nextStatusMap[currentStatus] }).catch((err) =>
-      console.error("[incidents]", err)
-    );
-  };
-
-  const getPriorityBadge = (p: IncidentPriority) => {
-    switch (p) {
-      case "critica":
-        return "bg-rose-500/10 text-rose-400 border-rose-500/30";
-      case "alta":
-        return "bg-amber-500/10 text-amber-400 border-amber-500/30";
-      case "media":
-        return "bg-accent-soft text-accent border-accent/30";
-      case "baja":
-        return "bg-panel-3/10 text-muted border-[var(--line-strong)]/30";
+          entity_id: inc.id,
+        });
+    } catch (err) {
+      console.error("[incidentes] estado", err);
+      toast.error(describeError(err, "No se pudo cambiar el estado."));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const getStatusBadge = (s: IncidentStatus) => {
-    switch (s) {
-      case "nuevo":
-        return "bg-accent-soft text-accent border-accent/30";
-      case "en_revision":
-        return "bg-amber-500/10 text-amber-400 border-amber-500/30";
-      case "en_proceso":
-        return "bg-accent-soft text-accent border-accent/30";
-      case "resuelto":
-        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
-      case "cerrado":
-        return "bg-panel-3/10 text-muted border-[var(--line-strong)]/30";
-    }
-  };
+  const openCount = incidents.filter((i) => isOpenIncident(i.status)).length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-semibold text-amber-400 uppercase tracking-wider">
-              REGISTRO Y SEGUIMIENTO OPERATIVO
-            </span>
-            <span className="text-xs text-muted">· {incidents.length} Registros Activos</span>
-          </div>
-          <h1 className="mt-1 adm-display text-[clamp(28px,3.6vw,44px)] text-foreground">
-            CRM de Incidentes y Novedades
-          </h1>
-          <p className="text-xs text-muted">
-            Bitácora de eventos en el corredor escolar, intervenciones de guardia y mantenimiento
-          </p>
-        </div>
+      <PageHeader
+        eyebrow={`${openCount} abiertos · ${incidents.length} en total`}
+        title="Incidentes y"
+        accent="novedades"
+        right={
+          canHandle && (
+            <button className={btnPrimary} onClick={() => setIsNewOpen(true)}>
+              <Plus className="h-4 w-4" /> Reportar incidente
+            </button>
+          )
+        }
+      >
+        Lo que pasa en el corredor escolar: quién lo atiende y en qué estado
+        está.
+      </PageHeader>
 
-        <button
-          disabled={!canHandle}
-          onClick={() => setIsNewModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-background hover:bg-[var(--accent-hover)] transition-colors"
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <input
+          type="search"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          placeholder="Buscar por código, escuela, descripción o responsable…"
+          aria-label="Buscar incidentes"
+          className={cn(searchInput, "pl-3 md:max-w-md")}
+        />
+        <select
+          aria-label="Filtrar por estado"
+          className={cn(input, "w-auto rounded-full")}
+          value={status}
+          onChange={(e) => setStatus(e.target.value as typeof status)}
         >
-          <Plus className="h-4 w-4" />
-          <span>Reportar Incidente</span>
-        </button>
+          <option value="open">Abiertos</option>
+          <option value="all">Todos los estados</option>
+          {(Object.keys(INCIDENT_STATUS_LABELS) as IncidentStatus[]).map(
+            (s) => (
+              <option key={s} value={s}>
+                {INCIDENT_STATUS_LABELS[s]}
+              </option>
+            ),
+          )}
+        </select>
+        <select
+          aria-label="Filtrar por prioridad"
+          className={cn(input, "w-auto rounded-full")}
+          value={priority}
+          onChange={(e) => setPriority(e.target.value as typeof priority)}
+        >
+          <option value="all">Todas las prioridades</option>
+          {(Object.keys(INCIDENT_PRIORITY_LABELS) as IncidentPriority[]).map(
+            (p) => (
+              <option key={p} value={p}>
+                {INCIDENT_PRIORITY_LABELS[p]}
+              </option>
+            ),
+          )}
+        </select>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-panel p-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por código, escuela, descripción..."
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--well)] py-2 pl-9 pr-4 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground/85 focus:border-accent/50 focus:outline-none"
-          >
-            <option value="all">Todos los Estados</option>
-            <option value="nuevo">Nuevo</option>
-            <option value="en_revision">En Revisión</option>
-            <option value="en_proceso">En Proceso</option>
-            <option value="resuelto">Resuelto</option>
-            <option value="cerrado">Cerrado</option>
-          </select>
-
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="rounded-lg border border-[var(--line)] bg-[var(--well)] px-3 py-2 text-xs text-foreground/85 focus:border-accent/50 focus:outline-none"
-          >
-            <option value="all">Todas las Prioridades</option>
-            <option value="critica">Crítica</option>
-            <option value="alta">Alta</option>
-            <option value="media">Media</option>
-            <option value="baja">Baja</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Incidents List */}
       <div className="space-y-3">
-        {filteredIncidents.map((inc) => (
-          <div
-            key={inc.id}
-            className="rounded-xl border border-[var(--line)] bg-panel p-5 hover:border-[var(--line-strong)] transition-all"
+        {loading && [0, 1, 2].map((i) => <Skeleton key={i} className="h-36" />)}
+        {!loading && filtered.length === 0 && (
+          <EmptyState
+            icon={<AlertTriangle className="h-6 w-6" />}
+            title={
+              incidents.length
+                ? "No hay incidentes con estos filtros"
+                : "Todavía no hay incidentes"
+            }
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--line)] pb-3">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-xs font-bold text-accent">
-                  {inc.code}
-                </span>
-                <span className="text-muted/60">|</span>
-                <span className="text-xs font-semibold text-foreground">
-                  {inc.school_name}
-                </span>
-                {inc.camera_name && (
-                  <span className="text-[11px] text-muted font-mono hidden md:inline">
-                    ({inc.camera_name})
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] font-mono font-bold uppercase",
-                    getPriorityBadge(inc.priority)
-                  )}
-                >
-                  {inc.priority}
-                </span>
-
-                <button
-                  disabled={!canHandle}
-                  onClick={() => cycleStatus(inc.id, inc.status)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase transition-transform active:scale-95 cursor-pointer hover:brightness-125",
-                    getStatusBadge(inc.status)
-                  )}
-                  title="Haga clic para avanzar de estado"
-                >
-                  {inc.status.replace("_", " ")} ↻
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <h3 className="adm-title text-[13px] text-foreground">{inc.title}</h3>
-              <p className="mt-1 text-xs text-foreground/85 leading-relaxed">
-                {inc.description}
-              </p>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5 text-accent" />
-                  <span>Asignado a: <strong className="text-foreground">{inc.assigned_to}</strong></span>
-                </span>
-                <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>{formatDate(inc.reported_at)}</span>
-                </span>
-              </div>
-
-              {inc.notes && (
-                <span className="text-[11px] italic text-muted">
-                  Nota: {inc.notes}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {filteredIncidents.length === 0 && (
-          <div className="py-12 text-center text-muted">
-            <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-xs font-semibold">No hay incidentes con los filtros seleccionados</p>
-          </div>
+            {incidents.length
+              ? "Probá con otro estado o borrá la búsqueda."
+              : "Cuando alguien reporte uno, aparece acá."}
+          </EmptyState>
         )}
+        {filtered.map((inc) => (
+          <IncidentCard
+            key={inc.id}
+            incident={inc}
+            canHandle={canHandle}
+            busy={busyId === inc.id}
+            onChangeStatus={(s) => void changeStatus(inc, s)}
+          />
+        ))}
       </div>
 
       <NewIncidentModal
-        isOpen={isNewModalOpen}
-        onClose={() => setIsNewModalOpen(false)}
-        onAddIncident={handleAddIncident}
+        isOpen={isNewOpen}
+        onClose={() => setIsNewOpen(false)}
+        onAddIncident={addIncident}
       />
     </div>
   );
