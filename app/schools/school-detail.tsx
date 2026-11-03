@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Cctv, Video } from "lucide-react";
-import { patchDoc } from "@/lib/firebase/data";
+import { useState } from "react";
+import { Cctv, Trash2, Video } from "lucide-react";
+import { patchDoc, removeDoc } from "@/lib/firebase/data";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { cameraCoverage } from "@/lib/geo";
 import { StatusBadge } from "@/components/status-badge";
 import { describeError, useToast } from "@/components/toast";
@@ -53,6 +55,23 @@ function Field({
 /** Ficha de la escuela elegida: datos, radio protegido y sus cámaras. */
 export function SchoolDetail({ school, cameras, canEdit }: SchoolDetailProps) {
   const toast = useToast();
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  // Una escuela con cámaras no se da de baja: primero se retiran las cámaras.
+  const canRemove = canEdit && cameras.length === 0;
+
+  const onRemove = async () => {
+    setRemoving(true);
+    try {
+      await removeDoc("schools", school.id);
+      toast.success(`${school.name} fue dada de baja.`);
+    } catch (err) {
+      toast.error(describeError(err, "No se pudo dar de baja la escuela."));
+      setRemoving(false);
+      setConfirmingRemoval(false);
+    }
+  };
 
   const onManagement = (value: SchoolManagement) =>
     patchDoc("schools", school.id, { management: value }).catch((err) =>
@@ -171,7 +190,38 @@ export function SchoolDetail({ school, cameras, canEdit }: SchoolDetailProps) {
             </ul>
           )}
         </div>
+
+        {canEdit && (
+          <div className="border-t border-[var(--line)] pt-4">
+            <button
+              type="button"
+              disabled={!canRemove}
+              onClick={() => setConfirmingRemoval(true)}
+              className={`${btnGhost} w-full text-[12px] hover:text-red-400`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Dar de baja la escuela
+            </button>
+            {!canRemove && (
+              <p className="mt-1.5 text-center text-[11px] text-muted">
+                Primero hay que dar de baja sus cámaras.
+              </p>
+            )}
+          </div>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingRemoval}
+        title={`¿Dar de baja ${school.name}?`}
+        confirmLabel="Dar de baja"
+        danger
+        busy={removing}
+        onConfirm={onRemove}
+        onCancel={() => setConfirmingRemoval(false)}
+      >
+        Se quita del corredor escolar y de los informes. Esta acción no se puede deshacer.
+      </ConfirmDialog>
     </Card>
   );
 }

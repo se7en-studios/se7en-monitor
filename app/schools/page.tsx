@@ -16,7 +16,7 @@ import { can } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { AddSchoolModal } from "@/components/add-school-modal";
-import { describeError, useToast } from "@/components/toast";
+import { useToast } from "@/components/toast";
 import {
   EmptyState,
   PageHeader,
@@ -70,22 +70,18 @@ function SchoolsView() {
     }
   };
 
-  const handleAddSchool = (newSchool: School) => {
-    saveDoc("schools", newSchool)
-      .then(() => {
-        setPickedId(newSchool.id);
-        toast.success(`${newSchool.name} quedó registrada.`);
-        return logActivity({
-          event_type: "school_registered",
-          title: "Escuela registrada",
-          description: `${newSchool.code} · ${newSchool.name}`,
-          entity_type: "school",
-          entity_id: newSchool.id,
-        });
-      })
-      .catch((err) =>
-        toast.error(describeError(err, "No se pudo registrar la escuela.")),
-      );
+  // Devuelve la promesa: si falla, el modal queda abierto y muestra el motivo.
+  const handleAddSchool = async (newSchool: School) => {
+    await saveDoc("schools", newSchool);
+    setPickedId(newSchool.id);
+    toast.success(`${newSchool.name} quedó registrada.`);
+    void logActivity({
+      event_type: "school_registered",
+      title: "Escuela registrada",
+      description: `${newSchool.code} · ${newSchool.name}`,
+      entity_type: "school",
+      entity_id: newSchool.id,
+    });
   };
 
   const addButton = canEdit && (
