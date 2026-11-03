@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:firebase": "node scripts/seed-firestore.mjs"
+    "seed:firebase": "node scripts/seed-firestore.mjs",
+    "test": "vitest run tests/unit",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-se7en-monitor \"vitest run tests/rules\""
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",
@@ -22,6 +24,7 @@
     "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/postcss": "^4.0.9",
     "@types/node": "^22.13.9",
     "@types/qrcode": "^1.5.5",
@@ -29,8 +32,10 @@
     "@types/react-dom": "^19.0.4",
     "dotenv": "^18.0.9",
     "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.34.2",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.0.9",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^5.1.0"
   }
 }

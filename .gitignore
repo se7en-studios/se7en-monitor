@@ -39,3 +39,7 @@ next-env.d.ts
 
 # Copias de trabajo de los agentes
 .claude/
+
+# emulador de Firebase
+firebase-debug.log*
+firestore-debug.log*
